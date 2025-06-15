@@ -1,0 +1,395 @@
+import 'package:flutter/material.dart';
+import 'orders_screen.dart';
+import '../../utils/app_theme.dart';
+
+class PaymentScreen extends StatefulWidget {
+  final Map<String, dynamic> orderDetails;
+
+  const PaymentScreen({super.key, required this.orderDetails});
+
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  String _selectedPaymentMethod = 'E-Wallet';
+  String _selectedOption = 'GoPay';
+  bool _isProcessing = false;
+
+  final List<Map<String, dynamic>> _paymentMethods = [
+    {
+      'name': 'E-Wallet',
+      'icon': Icons.account_balance_wallet,
+      'options': ['GoPay', 'OVO', 'DANA', 'ShopeePay'],
+    },
+    {
+      'name': 'Bank Transfer',
+      'icon': Icons.account_balance,
+      'options': ['BCA', 'Mandiri', 'BNI', 'BRI'],
+    },
+    {
+      'name': 'Credit Card',
+      'icon': Icons.credit_card,
+      'options': ['Visa', 'Mastercard', 'JCB'],
+    },
+    {
+      'name': 'Cash on Delivery',
+      'icon': Icons.money,
+      'options': ['Pay when order arrives'],
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Payment'),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Order Summary Card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Order Summary',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.espressoBrown,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Subtotal'),
+                              Text('Rp ${widget.orderDetails['subtotal']}'),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Delivery Fee'),
+                              Text('Rp ${widget.orderDetails['deliveryFee']}'),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Service Fee'),
+                              Text('Rp ${widget.orderDetails['serviceFee']}'),
+                            ],
+                          ),
+                          const Divider(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Total',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.espressoBrown,
+                                ),
+                              ),
+                              Text(
+                                'Rp ${widget.orderDetails['total']}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.espressoBrown,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Payment Methods
+                  const Text(
+                    'Select Payment Method',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.espressoBrown,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Fixed spread operator usage
+                  ..._paymentMethods.map((method) => Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Theme(
+                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            leading: Icon(
+                              method['icon'],
+                              color: _selectedPaymentMethod == method['name']
+                                  ? AppTheme.espressoBrown
+                                  : AppTheme.lightBrown,
+                            ),
+                            title: Text(
+                              method['name'],
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: _selectedPaymentMethod == method['name']
+                                    ? AppTheme.espressoBrown
+                                    : AppTheme.lightBrown,
+                              ),
+                            ),
+                            initiallyExpanded: _selectedPaymentMethod == method['name'],
+                            onExpansionChanged: (expanded) {
+                              if (expanded) {
+                                setState(() {
+                                  _selectedPaymentMethod = method['name'];
+                                  _selectedOption = method['options'][0];
+                                });
+                              }
+                            },
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Column(
+                                  children: method['options'].map<Widget>((option) => RadioListTile<String>(
+                                        title: Text(option),
+                                        value: option,
+                                        groupValue: _selectedOption,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _selectedOption = value!;
+                                            _selectedPaymentMethod = method['name'];
+                                          });
+                                        },
+                                        activeColor: AppTheme.espressoBrown,
+                                        dense: true,
+                                      )).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )).toList(),
+                  const SizedBox(height: 24),
+                  // Payment Instructions
+                  if (_selectedPaymentMethod == 'Bank Transfer') ...[
+                    Card(
+                      color: AppTheme.creamyLatte,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.info_outline, color: AppTheme.espressoBrown),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Payment Instructions',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.espressoBrown,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              '1. Transfer to the account number provided\n'
+                              '2. Use your order ID as transfer reference\n'
+                              '3. Payment will be verified automatically\n'
+                              '4. Order will be processed after payment confirmation',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppTheme.lightBrown,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          // Bottom Payment Button
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 10,
+                  offset: Offset(0, -5),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Total Payment',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.lightBrown,
+                          ),
+                        ),
+                        Text(
+                          'Rp ${widget.orderDetails['total']}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.espressoBrown,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'via $_selectedOption',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.lightBrown,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _isProcessing ? null : _processPayment,
+                    child: _isProcessing
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: AppTheme.creamyLatte,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Text('Processing...'),
+                            ],
+                          )
+                        : const Text(
+                            'Pay Now',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _processPayment() async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    // Simulate payment processing
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      // Show success dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color.fromRGBO(0, 128, 0, 0.1), // Green with opacity
+                  borderRadius: BorderRadius.circular(40),
+                ),
+                child: const Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 50,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Payment Successful!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.espressoBrown,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your order has been placed successfully. You can track your order in the Orders section.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppTheme.lightBrown,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const OrdersScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  child: const Text('View Orders'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+}
