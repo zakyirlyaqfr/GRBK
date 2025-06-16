@@ -1348,7 +1348,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 24),
                   
-                  // Continue Button
+                  // Continue Button - FIXED: Navigate to standalone HistoryScreen
                   Container(
                     width: double.infinity,
                     height: 56,
@@ -1373,16 +1373,17 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     child: ElevatedButton(
                       onPressed: isPaymentConfirmed ? () {
                         confirmationTimer?.cancel();
-                        Navigator.of(context).pop();
+                        Navigator.of(context).pop(); // Close the dialog
                         setState(() {
-                          _cartItems.clear();
+                          _cartItems.clear(); // Clear the cart
                         });
-                        // Navigate to history screen
-                        Navigator.pushReplacement(
-                          context,
+                        
+                        // Navigate to standalone HistoryScreen without bottom navigation
+                        Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(
                             builder: (context) => const HistoryScreen(),
                           ),
+                          (route) => route.isFirst, // Keep only the first route (home)
                         );
                       } : null,
                       style: ElevatedButton.styleFrom(
@@ -1397,7 +1398,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         children: [
                           Icon(
                             isPaymentConfirmed 
-                                ? Icons.arrow_forward_rounded 
+                                ? Icons.receipt_long_rounded 
                                 : Icons.hourglass_empty_rounded,
                             color: Colors.white,
                             size: 24,

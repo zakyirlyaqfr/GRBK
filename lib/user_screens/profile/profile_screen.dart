@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import '../auth/login_screen.dart';
 import '../../utils/app_theme.dart';
@@ -74,64 +75,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Profile Avatar with Upload
           GestureDetector(
             onTap: _showImagePickerOptions,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(60),
-                border: Border.all(
-                  color: AppTheme.lightCream,
-                  width: 4,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.richBlack.withValues(alpha: 0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(56),
-                child: _profileImage != null
-                    ? Image.file(
-                        _profileImage!,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        decoration: const BoxDecoration(
-                          gradient: AppTheme.lightGradient,
-                        ),
-                        child: const Icon(
-                          Icons.person_rounded,
-                          size: 60,
-                          color: AppTheme.deepNavy,
-                        ),
+            child: Stack(
+              children: [
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(60),
+                    border: Border.all(
+                      color: AppTheme.lightCream,
+                      width: 4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.richBlack.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
                       ),
-              ),
-            ),
-          ),
-          
-          // Camera Icon Overlay
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                gradient: AppTheme.accentGradient,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: AppTheme.lightCream,
-                  width: 2,
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(56),
+                    child: _profileImage != null
+                        ? Image.file(
+                            _profileImage!,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            decoration: const BoxDecoration(
+                              gradient: AppTheme.lightGradient,
+                            ),
+                            child: const Icon(
+                              Icons.person_rounded,
+                              size: 60,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                  ),
                 ),
-              ),
-              child: const Icon(
-                Icons.camera_alt_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
+                
+                // Camera Icon Overlay
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.accentGradient,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: AppTheme.lightCream,
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           
@@ -450,7 +455,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Icons.camera_alt_rounded,
                     'Camera',
                     AppTheme.primaryGradient,
-                    () => _pickImage(ImageSource.camera),
+                    () => _pickImageFromCamera(),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -497,10 +502,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Enhanced camera access method with permission handling
+  Future<void> _pickImageFromCamera() async {
+    Navigator.pop(context);
+    
+    try {
+      // Check camera permission
+      final cameraStatus = await Permission.camera.status;
+      if (cameraStatus.isDenied) {
+        final result = await Permission.camera.request();
+        if (result.isDenied) {
+          _showErrorSnackBar('Izin kamera diperlukan untuk mengambil foto');
+          return;
+        }
+      }
+
+      if (cameraStatus.isPermanentlyDenied) {
+        _showPermissionDialog();
+        return;
+      }
+
+      // Pick image from camera with quality settings like in menu_management_screen
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _profileImage = File(image.path);
+        });
+        _showSuccessSnackBar('Profile photo updated successfully!');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to access camera. Please try again.');
+    }
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     Navigator.pop(context);
     try {
-      final XFile? image = await _picker.pickImage(source: source);
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
+      );
       if (image != null) {
         setState(() {
           _profileImage = File(image.path);
@@ -512,6 +561,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Camera Permission Required',
+          style: GoogleFonts.oswald(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.deepNavy,
+          ),
+        ),
+        content: Text(
+          'Please enable camera permission in settings to take photos.',
+          style: GoogleFonts.poppins(
+            color: AppTheme.charcoalGray,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: AppTheme.charcoalGray,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.deepNavy,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              'Open Settings',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Rest of the methods remain the same...
   void _showEditProfileDialog() {
     final nameController = TextEditingController(text: _userProfile['name']);
     final emailController = TextEditingController(text: _userProfile['email']);

@@ -185,15 +185,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Greeting Text
-                    Text(
-                      'Hi! #TeamGRBK',
-                      style: GoogleFonts.oswald(
-                        color: AppTheme.lightCream,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
+                    Flexible(
+                      child: Text(
+                        'Hi! #TeamGRBK',
+                        style: GoogleFonts.oswald(
+                          color: AppTheme.lightCream,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 16),
                     // Logo
                     Container(
                       width: 50,
@@ -353,6 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -361,6 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white.withValues(alpha: 0.9),
                                 fontSize: 14,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
                             ),
                           ],
                         ),
@@ -651,29 +658,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        product['name'],
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                      // Product name with overflow protection
+                      Flexible(
+                        child: Text(
+                          product['name'],
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const Spacer(),
+                      const SizedBox(height: 8),
+                      // Price and button row with overflow protection
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Rp ${product['price']}',
-                            style: GoogleFonts.oswald(
-                              color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                          // Price with flexible width
+                          Expanded(
+                            child: Text(
+                              'Rp ${product['price']}',
+                              style: GoogleFonts.oswald(
+                                color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          // Add button with fixed size
                           Container(
                             width: 36,
                             height: 36,

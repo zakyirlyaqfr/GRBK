@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-// import 'user_screens/auth/splash_screen.dart';
-import 'admin_screens/dashboard/admin_dashboard_screen.dart';
+import 'user_screens/auth/splash_screen.dart';
+// import 'admin_screens/dashboard/admin_dashboard_screen.dart';
 import 'utils/app_theme.dart';
 
 void main() {
@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'GRBK Coffee Shop',
       theme: AppTheme.lightTheme,
-      home: const AdminDashboardScreen(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

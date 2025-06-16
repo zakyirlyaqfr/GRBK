@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui';
 import '../../utils/app_theme.dart';
 import '../menu/menu_management_screen.dart';
 import '../stock/stock_management_screen.dart';
@@ -14,64 +15,78 @@ class AdminDashboardScreen extends StatefulWidget {
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> with TickerProviderStateMixin {
+class _AdminDashboardScreenState extends State<AdminDashboardScreen>
+    with TickerProviderStateMixin {
   int _selectedIndex = 0;
   bool _isSidebarOpen = false;
-  String _selectedCategory = 'Semua';
-  
-  late AnimationController _sidebarController;
-  late Animation<Offset> _sidebarSlideAnimation;
+  String _selectedCategory = 'All';
 
-  final List<String> _categories = ['Semua', 'Coffee', 'Non-Coffee', 'Food', 'Snack'];
-  
+  late AnimationController _sidebarController;
+  late AnimationController _overlayController;
+  late Animation<Offset> _sidebarSlideAnimation;
+  late Animation<double> _overlayOpacityAnimation;
+
+  // Updated categories to match home_screen.dart
+  final List<String> _categories = [
+    'All',
+    'Kopi Susu',
+    'Basic Espresso',
+    'Sparkling Fruity',
+    'Milk Base',
+    'Tea Series',
+    'Food'
+  ];
+
+  // Updated products to match home_screen.dart structure
   final List<Map<String, dynamic>> _products = [
     {
       'name': 'GRBK Special Blend',
-      'category': 'Coffee',
       'price': 35000,
-      'stock': 25,
-      'image': 'assets/coffee1.jpg',
+      'image': '☕',
+      'category': 'Kopi Susu',
+      'description':
+          'Our signature specialty coffee blend with notes of chocolate and caramel',
       'isAvailable': true,
     },
     {
-      'name': 'Caramel Macchiato',
-      'category': 'Coffee',
-      'price': 42000,
-      'stock': 18,
-      'image': 'assets/coffee2.jpg',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Iced Chocolate',
-      'category': 'Non-Coffee',
-      'price': 28000,
-      'stock': 0,
-      'image': 'assets/chocolate.jpg',
+      'name': 'Single Origin Americano',
+      'price': 25000,
+      'image': '☕',
+      'category': 'Basic Espresso',
+      'description': 'Bold and smooth americano from single origin beans',
       'isAvailable': false,
     },
     {
+      'name': 'Matcha Latte',
+      'price': 30000,
+      'image': '🍵',
+      'category': 'Milk Base',
+      'description': 'Premium matcha with creamy milk foam',
+      'isAvailable': true,
+    },
+    {
+      'name': 'Lemon Mint Refresher',
+      'price': 28000,
+      'image': '🍋',
+      'category': 'Sparkling Fruity',
+      'description': 'Fresh lemon with mint leaves, perfect for hot days',
+      'isAvailable': false,
+    },
+    {
+      'name': 'Earl Grey Tea',
+      'price': 22000,
+      'image': '🫖',
+      'category': 'Tea Series',
+      'description': 'Classic earl grey with bergamot essence',
+      'isAvailable': true,
+    },
+    {
       'name': 'Artisan Croissant',
-      'category': 'Food',
       'price': 18000,
-      'stock': 12,
-      'image': 'assets/croissant.jpg',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Blueberry Muffin',
-      'category': 'Snack',
-      'price': 15000,
-      'stock': 8,
-      'image': 'assets/muffin.jpg',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Green Tea Latte',
-      'category': 'Non-Coffee',
-      'price': 32000,
-      'stock': 15,
-      'image': 'assets/greentea.jpg',
-      'isAvailable': true,
+      'image': '🥐',
+      'category': 'Food',
+      'description': 'Buttery croissant baked fresh daily',
+      'isAvailable': false,
     },
   ];
 
@@ -111,12 +126,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
   @override
   void initState() {
     super.initState();
-    
+
     _sidebarController = AnimationController(
       duration: const Duration(milliseconds: 250),
       vsync: this,
     );
-    
+
+    _overlayController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+
     _sidebarSlideAnimation = Tween<Offset>(
       begin: const Offset(-1.0, 0.0),
       end: Offset.zero,
@@ -124,11 +144,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
       parent: _sidebarController,
       curve: Curves.easeInOut,
     ));
+
+    _overlayOpacityAnimation = Tween<double>(
+      begin: 0.0,
+      end: 0.5,
+    ).animate(CurvedAnimation(
+      parent: _overlayController,
+      curve: Curves.easeInOut,
+    ));
   }
 
   @override
   void dispose() {
     _sidebarController.dispose();
+    _overlayController.dispose();
     super.dispose();
   }
 
@@ -136,11 +165,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
     setState(() {
       _isSidebarOpen = !_isSidebarOpen;
     });
-    
+
     if (_isSidebarOpen) {
       _sidebarController.forward();
+      _overlayController.forward();
     } else {
       _sidebarController.reverse();
+      _overlayController.reverse();
+    }
+  }
+
+  void _closeSidebar() {
+    if (_isSidebarOpen) {
+      setState(() {
+        _isSidebarOpen = false;
+      });
+      _sidebarController.reverse();
+      _overlayController.reverse();
     }
   }
 
@@ -150,13 +191,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
       _isSidebarOpen = false; // Auto close sidebar
     });
     _sidebarController.reverse();
+    _overlayController.reverse();
   }
 
   List<Map<String, dynamic>> get _filteredProducts {
-    if (_selectedCategory == 'Semua') {
+    if (_selectedCategory == 'All') {
       return _products;
     }
-    return _products.where((product) => product['category'] == _selectedCategory).toList();
+    return _products
+        .where((product) => product['category'] == _selectedCategory)
+        .toList();
   }
 
   @override
@@ -165,90 +209,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
       backgroundColor: AppTheme.softWhite,
       body: Stack(
         children: [
-          // Main Content
-          Column(
-            children: [
-              // Top Bar - Optimized for iPhone 14 Pro Max
-              Container(
-                height: 110, // Increased for better mobile spacing
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 60, // Adjusted for iPhone notch
-                  bottom: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.deepNavy.withValues(alpha: 0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+          // Main Content with Gesture Detection
+          GestureDetector(
+            onTap: _isSidebarOpen ? _closeSidebar : null,
+            child: AbsorbPointer(
+              absorbing:
+                  _isSidebarOpen, // Disable interactions when sidebar is open
+              child: Column(
+                children: [
+                  // Top Bar - Optimized for iPhone 14 Pro Max
+                  Container(
+                    height: 100,
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 50,
+                      bottom: 12,
                     ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // Hamburger Menu Button
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppTheme.softWhite,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppTheme.warmBeige.withValues(alpha: 0.3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.deepNavy.withValues(alpha: 0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                      child: IconButton(
-                        onPressed: _toggleSidebar,
-                        icon: AnimatedRotation(
-                          turns: _isSidebarOpen ? 0.25 : 0,
-                          duration: const Duration(milliseconds: 250),
-                          child: const Icon(
-                            Icons.menu_rounded,
-                            color: AppTheme.deepNavy,
-                            size: 20,
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-                    
-                    const SizedBox(width: 12),
-                    
-                    // Title
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _getScreenTitle(),
-                            style: GoogleFonts.oswald(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.deepNavy,
-                            ),
-                          ),
-                          Text(
-                            _getScreenSubtitle(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              color: AppTheme.charcoalGray,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // Notification & Profile
-                    Row(
+                    child: Row(
                       children: [
+                        // Hamburger Menu Button
                         Container(
-                          width: 40,
-                          height: 40,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
                             color: AppTheme.softWhite,
                             borderRadius: BorderRadius.circular(10),
@@ -257,54 +250,81 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
                             ),
                           ),
                           child: IconButton(
-                            onPressed: () {},
-                            icon: Stack(
-                              children: [
-                                const Icon(
-                                  Icons.notifications_rounded,
-                                  color: AppTheme.deepNavy,
-                                  size: 18,
-                                ),
-                                Positioned(
-                                  right: 2,
-                                  top: 2,
-                                  child: Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            onPressed: _toggleSidebar,
+                            icon: AnimatedRotation(
+                              turns: _isSidebarOpen ? 0.25 : 0,
+                              duration: const Duration(milliseconds: 250),
+                              child: const Icon(
+                                Icons.menu_rounded,
+                                color: AppTheme.deepNavy,
+                                size: 18,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: AppTheme.deepNavy,
-                          child: const Icon(
-                            Icons.person_rounded,
-                            color: Colors.white,
-                            size: 16,
+
+                        const SizedBox(width: 12),
+
+                        // Title
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _getScreenTitle(),
+                                style: GoogleFonts.oswald(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.deepNavy,
+                                ),
+                              ),
+                              Text(
+                                _getScreenSubtitle(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: AppTheme.charcoalGray,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Content
+                  Expanded(
+                    child: _buildScreenContent(),
+                  ),
+                ],
               ),
-              
-              // Content
-              Expanded(
-                child: _buildScreenContent(),
-              ),
-            ],
+            ),
           ),
-          
-          // Animated Sidebar - No overlay blur
+
+          // Overlay when sidebar is open
+          AnimatedBuilder(
+            animation: _overlayOpacityAnimation,
+            builder: (context, child) {
+              return _overlayOpacityAnimation.value > 0
+                  ? Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(
+                          alpha: _overlayOpacityAnimation.value,
+                        ),
+                        child: GestureDetector(
+                          onTap: _closeSidebar,
+                          behavior: HitTestBehavior.translucent,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink();
+            },
+          ),
+
+          // Animated Sidebar
           SlideTransition(
             position: _sidebarSlideAnimation,
             child: _buildSidebar(),
@@ -316,7 +336,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
 
   Widget _buildSidebar() {
     return Container(
-      width: 260, // Optimized width for mobile
+      width: 260,
       height: double.infinity,
       decoration: BoxDecoration(
         gradient: AppTheme.primaryGradient,
@@ -370,7 +390,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
                 ],
               ),
             ),
-            
+
             // Menu Items
             Expanded(
               child: Container(
@@ -380,7 +400,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
                   itemBuilder: (context, index) {
                     final item = _menuItems[index];
                     final isSelected = _selectedIndex == index;
-                    
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 4),
                       child: Material(
@@ -391,17 +411,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 14, 
+                              horizontal: 14,
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: isSelected 
+                              color: isSelected
                                   ? Colors.white.withValues(alpha: 0.2)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
-                              border: isSelected 
+                              border: isSelected
                                   ? Border.all(
-                                      color: Colors.white.withValues(alpha: 0.3),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.3),
                                     )
                                   : null,
                             ),
@@ -419,8 +440,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
                                     style: GoogleFonts.poppins(
                                       color: Colors.white,
                                       fontSize: 14,
-                                      fontWeight: isSelected 
-                                          ? FontWeight.w600 
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
                                           : FontWeight.w500,
                                     ),
                                   ),
@@ -444,7 +465,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
                 ),
               ),
             ),
-            
+
             // Footer
             Container(
               padding: const EdgeInsets.all(16),
@@ -499,25 +520,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
 
   String _getScreenTitle() {
     switch (_selectedIndex) {
-      case 0: return 'Dashboard';
-      case 1: return 'Kelola Menu';
-      case 2: return 'Kelola Stok';
-      case 3: return 'Kelola User';
-      case 4: return 'Kasir';
-      case 5: return 'Laporan';
-      default: return 'Dashboard';
+      case 0:
+        return 'Dashboard';
+      case 1:
+        return 'Kelola Menu';
+      case 2:
+        return 'Kelola Stok';
+      case 3:
+        return 'Kelola User';
+      case 4:
+        return 'Kasir';
+      case 5:
+        return 'Laporan';
+      default:
+        return 'Dashboard';
     }
   }
 
   String _getScreenSubtitle() {
     switch (_selectedIndex) {
-      case 0: return 'Ringkasan dan katalog produk GRBK Coffee';
-      case 1: return 'Manajemen menu dan produk';
-      case 2: return 'Manajemen stok dan ketersediaan';
-      case 3: return 'Manajemen pengguna dan admin';
-      case 4: return 'Sistem kasir dan pembayaran';
-      case 5: return 'Laporan penjualan dan analitik';
-      default: return 'Ringkasan dan katalog produk GRBK Coffee';
+      case 0:
+        return 'Ringkasan dan katalog produk GRBK Coffee';
+      case 1:
+        return 'Manajemen menu dan produk';
+      case 2:
+        return 'Manajemen stok dan ketersediaan';
+      case 3:
+        return 'Manajemen pengguna dan admin';
+      case 4:
+        return 'Sistem kasir dan pembayaran';
+      case 5:
+        return 'Laporan penjualan dan analitik';
+      default:
+        return 'Ringkasan dan katalog produk GRBK Coffee';
     }
   }
 
@@ -547,140 +582,167 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Statistics Cards
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.3,
-            children: [
-              _buildStatCard(
-                'Total Produk',
-                '${_products.length}',
-                Icons.inventory_rounded,
-                AppTheme.primaryGradient,
-              ),
-              _buildStatCard(
-                'Stok Tersedia',
-                '${_products.where((p) => p['isAvailable']).length}',
-                Icons.check_circle_rounded,
-                const LinearGradient(
-                  colors: [Colors.green, Colors.lightGreen],
+          Container(
+            height: 200,
+            child: Column(
+              children: [
+                // Baris pertama
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          'Total Produk',
+                          '${_products.length}',
+                          Icons.inventory_rounded,
+                          AppTheme.primaryGradient,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Stok Tersedia',
+                          '${_products.where((p) => p['isAvailable']).length}',
+                          Icons.check_circle_rounded,
+                          const LinearGradient(
+                            colors: [Color(0xFF4CAF50), Color(0xFF8BC34A)],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              _buildStatCard(
-                'Stok Habis',
-                '${_products.where((p) => !p['isAvailable']).length}',
-                Icons.warning_rounded,
-                const LinearGradient(
-                  colors: [Colors.orange, Colors.deepOrange],
+                const SizedBox(height: 12),
+                // Baris kedua
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          'Stok Habis',
+                          '${_products.where((p) => !p['isAvailable']).length}',
+                          Icons.warning_rounded,
+                          const LinearGradient(
+                            colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Kategori',
+                          '${_categories.length - 1}',
+                          Icons.category_rounded,
+                          AppTheme.accentGradient,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              _buildStatCard(
-                'Kategori',
-                '${_categories.length - 1}',
-                Icons.category_rounded,
-                AppTheme.accentGradient,
-              ),
-            ],
+              ],
+            ),
           ),
-          
-          const SizedBox(height: 20),
-          
-          // Category Filter
-          Row(
-            children: [
-              Text(
-                'Katalog Produk',
-                style: GoogleFonts.oswald(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepNavy,
-                ),
-              ),
-            ],
+
+          const SizedBox(height: 24),
+
+          // Product Section Header
+          Text(
+            'Our Products',
+            style: GoogleFonts.oswald(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.deepNavy,
+            ),
           ),
-          
+
           const SizedBox(height: 12),
-          
-          // Category Chips
-          SizedBox(
-            height: 32,
-            child: ListView.builder(
+
+          // Categories
+          Container(
+            height: 40,
+            child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _categories.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final category = _categories[index];
                 final isSelected = _selectedCategory == category;
-                
-                return Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  child: FilterChip(
-                    selected: isSelected,
-                    label: Text(
-                      category,
-                      style: GoogleFonts.poppins(
-                        color: isSelected ? Colors.white : AppTheme.deepNavy,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11,
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedCategory = category),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: isSelected ? AppTheme.primaryGradient : null,
+                      color: isSelected ? null : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.transparent
+                            : AppTheme.warmBeige,
+                        width: 1,
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isSelected
+                              ? AppTheme.deepNavy.withValues(alpha: 0.2)
+                              : Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedCategory = category;
-                      });
-                    },
-                    backgroundColor: Colors.white,
-                    selectedColor: AppTheme.deepNavy,
-                    checkmarkColor: Colors.white,
-                    side: BorderSide(
-                      color: isSelected ? AppTheme.deepNavy : AppTheme.warmBeige,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10, 
-                      vertical: 4,
+                    child: Center(
+                      child: Text(
+                        category,
+                        style: GoogleFonts.poppins(
+                          color: isSelected ? Colors.white : AppTheme.deepNavy,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                 );
               },
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Product Grid
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.75,
+              childAspectRatio: 0.8,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
             ),
             itemCount: _filteredProducts.length,
             itemBuilder: (context, index) {
               final product = _filteredProducts[index];
-              return _buildProductCard(product);
+              return _buildEnhancedProductCard(product);
             },
           ),
-          
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Gradient gradient) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Gradient gradient) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: gradient,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -691,18 +753,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
         children: [
           Row(
             children: [
-              Icon(icon, color: Colors.white, size: 20),
+              Icon(icon, color: Colors.white, size: 18),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                 ),
                 child: const Icon(
                   Icons.trending_up_rounded,
                   color: Colors.white,
-                  size: 10,
+                  size: 8,
                 ),
               ),
             ],
@@ -720,143 +782,154 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Ticker
           Text(
             title,
             style: GoogleFonts.poppins(
-              fontSize: 10,
+              fontSize: 9,
               color: Colors.white.withValues(alpha: 0.9),
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildProductCard(Map<String, dynamic> product) {
+  Widget _buildEnhancedProductCard(Map<String, dynamic> product) {
+    final bool isAvailable = product['isAvailable'] ?? true;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: AppTheme.deepNavy.withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Product Image
-          Expanded(
-            flex: 3,
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: AppTheme.lightGradient,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(14),
-                ),
-              ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
               child: Stack(
                 children: [
-                  Center(
-                    child: Icon(
-                      Icons.local_cafe_rounded,
-                      size: 32,
-                      color: AppTheme.deepNavy.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  // Stock Status Badge
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4, 
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: product['isAvailable'] ? Colors.green : Colors.red,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        product['isAvailable'] ? 'Tersedia' : 'Habis',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      gradient: AppTheme.neutralGradient,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Product Info
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product['name'],
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.deepNavy,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    product['category'],
-                    style: GoogleFonts.poppins(
-                      fontSize: 9,
-                      color: AppTheme.charcoalGray,
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Rp ${product['price']}',
-                        style: GoogleFonts.oswald(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.deepNavy,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4, 
-                          vertical: 1,
-                        ),
+                    child: Center(
+                      child: Container(
+                        width: 80,
+                        height: 80,
                         decoration: BoxDecoration(
-                          color: AppTheme.warmBeige.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.white.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          'Stok: ${product['stock']}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.deepNavy,
+                        child: Center(
+                          child: Text(
+                            product['image'],
+                            style: const TextStyle(fontSize: 40),
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
+                  if (!isAvailable)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(24),
+                              ),
+                            ),
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.red.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  'NOT AVAILABLE',
+                                  style: GoogleFonts.oswald(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product['name'],
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: isAvailable
+                            ? AppTheme.deepNavy
+                            : AppTheme.charcoalGray,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Rp ${product['price']}',
+                      style: GoogleFonts.oswald(
+                        color: isAvailable
+                            ? AppTheme.deepNavy
+                            : AppTheme.charcoalGray,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -35,6 +35,13 @@ dependencies:
   flutter_animate: ^4.5.0
   image_picker: ^1.1.2
   qr_flutter: ^4.1.0
+  camera: ^0.11.1
+  permission_handler: ^12.0.0+1
+  pdf: ^3.11.3
+  excel: ^4.0.6
+  path_provider: ^2.1.5
+  intl: ^0.20.2
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
