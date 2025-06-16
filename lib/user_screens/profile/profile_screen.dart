@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import '../auth/login_screen.dart';
+import '../../services/pocketbase_service.dart';
 import '../../utils/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -14,11 +15,13 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final Map<String, dynamic> _userProfile = {
-    'name': 'John Doe',
-    'email': 'john.doe@email.com',
-    'joinDate': 'January 2024',
-    'totalOrders': 24,
+  final _pocketbaseService = PocketBaseService();
+  
+  Map<String, dynamic> _userProfile = {
+    'name': 'Loading...',
+    'email': 'Loading...',
+    'joinDate': 'Loading...',
+    'totalOrders': 0,
     'profileImage': null,
   };
 
@@ -31,6 +34,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  void _loadUserProfile() {
+    final user = _pocketbaseService.currentUser;
+    if (user != null) {
+      setState(() {
+        _userProfile = {
+          'name': user.name,
+          'email': user.email,
+          'joinDate': _formatDate(user.created),
+          'totalOrders': 24, // This would come from orders collection
+          'profileImage': null,
+        };
+      });
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -703,13 +735,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _userProfile['name'] = nameController.text;
-                            _userProfile['email'] = emailController.text;
-                          });
-                          Navigator.pop(context);
-                          _showSuccessSnackBar('Profile updated successfully!');
+                        onPressed: () async {
+                          final result = await _pocketbaseService.updateProfile(
+                            nameController.text.trim(),
+                            emailController.text.trim(),
+                          );
+                          
+                          if (mounted) {
+                            Navigator.pop(context);
+                            if (result['success']) {
+                              _loadUserProfile();
+                              _showSuccessSnackBar('Profile updated successfully!');
+                            } else {
+                              _showErrorSnackBar(result['message'] ?? 'Update failed');
+                            }
+                          }
                         },
                         child: Text(
                           'Save Changes',
@@ -1197,12 +1237,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: TextButton(
-                        onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => const LoginScreen()),
-                            (route) => false,
-                          );
+                        onPressed: () async {
+                          await _pocketbaseService.logout();
+                          if (mounted) {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (context) => const LoginScreen()),
+                              (route) => false,
+                            );
+                          }
                         },
                         child: Text(
                           'Logout',

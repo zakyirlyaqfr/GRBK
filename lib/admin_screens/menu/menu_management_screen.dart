@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:universal_html/html.dart' as html;
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../utils/app_theme.dart';
 
 class MenuManagementScreen extends StatefulWidget {
@@ -97,6 +100,34 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     }
     
     return filtered;
+  }
+
+  String? _webImageUrl;
+
+  Future<void> _pickImage(Function(String) onImageSelected) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
+      );
+      
+      if (image != null) {
+        if (kIsWeb) {
+          // Handle web platform
+          final bytes = await image.readAsBytes();
+          final blob = html.Blob([bytes]);
+          _webImageUrl = html.Url.createObjectUrlFromBlob(blob);
+          onImageSelected(image.path); // Still pass the path for consistency
+        } else {
+          // Handle native platforms
+          onImageSelected(image.path);
+        }
+      }
+    } catch (e) {
+      _showErrorSnackBar('Gagal memilih gambar: $e');
+    }
   }
 
   @override
@@ -730,20 +761,33 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     }
   }
 
-  Future<void> _pickImage(Function(String) onImageSelected) async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 80,
+  Widget _buildImageDisplay(String? imagePath) {
+    if (kIsWeb && _webImageUrl != null) {
+      // Web platform with selected image
+      return Image.network(
+        _webImageUrl!,
+        fit: BoxFit.cover,
       );
-      
-      if (image != null) {
-        onImageSelected(image.path);
+    } else if (imagePath != null) {
+      // Native platforms or default image
+      if (imagePath.startsWith('assets/')) {
+        return Image.asset(
+          imagePath,
+          fit: BoxFit.cover,
+        );
+      } else {
+        return Image.file(
+          File(imagePath),
+          fit: BoxFit.cover,
+        );
       }
-    } catch (e) {
-      _showErrorSnackBar('Gagal memilih gambar: $e');
+    } else {
+      // No image selected
+      return const Icon(
+        Icons.image_rounded,
+        size: 40,
+        color: AppTheme.charcoalGray,
+      );
     }
   }
 
@@ -839,19 +883,16 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: AppTheme.warmBeige.withValues(alpha: 0.5)),
                                 ),
-                                child: selectedImagePath != null
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Image.file(
-                                          File(selectedImagePath!),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: selectedImagePath != null
+                                    ? _buildImageDisplay(selectedImagePath)
                                     : const Icon(
                                         Icons.image_rounded,
                                         size: 40,
                                         color: AppTheme.charcoalGray,
                                       ),
+                                ),
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
@@ -1096,31 +1137,16 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: AppTheme.warmBeige.withValues(alpha: 0.5)),
                                 ),
-                                child: selectedImagePath != null
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: selectedImagePath!.startsWith('assets/')
-                                            ? Container(
-                                                decoration: BoxDecoration(
-                                                  color: AppTheme.warmBeige.withValues(alpha: 0.3),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.image_rounded,
-                                                  size: 40,
-                                                  color: AppTheme.charcoalGray,
-                                                ),
-                                              )
-                                            : Image.file(
-                                                File(selectedImagePath!),
-                                                fit: BoxFit.cover,
-                                              ),
-                                      )
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: selectedImagePath != null
+                                    ? _buildImageDisplay(selectedImagePath)
                                     : const Icon(
                                         Icons.image_rounded,
                                         size: 40,
                                         color: AppTheme.charcoalGray,
                                       ),
+                                ),
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
