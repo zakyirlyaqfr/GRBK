@@ -567,7 +567,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       // Memusatkan secara horizontal dan vertikal
       child: Container(
         padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
-        constraints: BoxConstraints(
+        constraints: const BoxConstraints(
             maxWidth:
                 400), // Batasi lebar maksimum untuk memastikan konten terpusat
         decoration: BoxDecoration(

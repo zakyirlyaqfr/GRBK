@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'dart:ui';
 import '../product/product_detail_screen.dart';
 import '../cart/cart_screen.dart';
 import '../orders/history_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/product_provider.dart';
+import '../../models/product_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final PageController _bannerPageController = PageController();
   int _currentBannerIndex = 0;
 
-  // Banner/Promotional images for sliding (like Gojek)
   final List<Map<String, String>> _bannerImages = [
     {
       'image': 'assets/images/banner1.jpg',
@@ -45,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
-  // Updated categories
   final List<String> _categories = [
     'All',
     'Kopi Susu',
@@ -56,77 +57,12 @@ class _HomeScreenState extends State<HomeScreen> {
     'Food'
   ];
 
-  final List<Map<String, dynamic>> _products = [
-    {
-      'name': 'GRBK Special Blend',
-      'price': 35000,
-      'image': '☕',
-      'category': 'Kopi Susu',
-      'description': 'Our signature specialty coffee blend with notes of chocolate and caramel',
-      'isAvailable': true, // Available
-    },
-    {
-      'name': 'Single Origin Americano',
-      'price': 25000,
-      'image': '☕',
-      'category': 'Basic Espresso',
-      'description': 'Bold and smooth americano from single origin beans',
-      'isAvailable': false, // Out of stock
-    },
-    {
-      'name': 'Matcha Latte',
-      'price': 30000,
-      'image': '🍵',
-      'category': 'Milk Base',
-      'description': 'Premium matcha with creamy milk foam',
-      'isAvailable': true, // Available
-    },
-    {
-      'name': 'Lemon Mint Refresher',
-      'price': 28000,
-      'image': '🍋',
-      'category': 'Sparkling Fruity',
-      'description': 'Fresh lemon with mint leaves, perfect for hot days',
-      'isAvailable': false, // Out of stock
-    },
-    {
-      'name': 'Earl Grey Tea',
-      'price': 22000,
-      'image': '🫖',
-      'category': 'Tea Series',
-      'description': 'Classic earl grey with bergamot essence',
-      'isAvailable': true, // Available
-    },
-    {
-      'name': 'Artisan Croissant',
-      'price': 18000,
-      'image': '🥐',
-      'category': 'Food',
-      'description': 'Buttery croissant baked fresh daily',
-      'isAvailable': false, // Out of stock
-    },
-  ];
-
-  List<Map<String, dynamic>> get _filteredProducts {
-    List<Map<String, dynamic>> filtered = _products;
-    
-    if (_selectedCategory != 'All') {
-      filtered = filtered.where((product) => product['category'] == _selectedCategory).toList();
-    }
-    
-    if (_searchController.text.isNotEmpty) {
-      filtered = filtered.where((product) => 
-        product['name'].toLowerCase().contains(_searchController.text.toLowerCase())
-      ).toList();
-    }
-    
-    return filtered;
-  }
-
   @override
   void initState() {
     super.initState();
-    // Auto-slide banner every 4 seconds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProductProvider>().loadProducts();
+    });
     Future.delayed(const Duration(seconds: 2), () {
       _startAutoSlide();
     });
@@ -146,6 +82,22 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
     }
+  }
+
+  List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
+    List<ProductModel> filtered = products;
+    
+    if (_selectedCategory != 'All') {
+      filtered = filtered.where((product) => product.category == _selectedCategory).toList();
+    }
+    
+    if (_searchController.text.isNotEmpty) {
+      filtered = filtered.where((product) => 
+        product.name.toLowerCase().contains(_searchController.text.toLowerCase())
+      ).toList();
+    }
+    
+    return filtered;
   }
 
   @override
@@ -168,7 +120,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       child: Column(
         children: [
-          // Header Section
           Container(
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
@@ -180,11 +131,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Column(
               children: [
-                // Top Header with greeting and logo
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Greeting Text
                     Flexible(
                       child: Text(
                         'Hi! #TeamGRBK',
@@ -198,7 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Logo
                     Container(
                       width: 50,
                       height: 50,
@@ -239,23 +187,12 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  
-                  // Banner/Promotional Images Slider (like Gojek)
                   _buildBannerSlider(),
-                  
                   const SizedBox(height: 24),
-                  
-                  // Search Bar
                   _buildSearchBar(),
-                  
                   const SizedBox(height: 20),
-                  
-                  // Categories
                   _buildCategories(),
-                  
                   const SizedBox(height: 20),
-                  
-                  // Products Section
                   _buildProductsSection(),
                 ],
               ),
@@ -272,7 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 180,
       child: Stack(
         children: [
-          // Banner PageView
           PageView.builder(
             controller: _bannerPageController,
             onPageChanged: (index) {
@@ -300,7 +236,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(20),
                   child: Stack(
                     children: [
-                      // Background Image
                       Container(
                         width: double.infinity,
                         height: double.infinity,
@@ -329,7 +264,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                       ),
-                      // Overlay Content
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -342,7 +276,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
-                      // Text Content
                       Positioned(
                         bottom: 20,
                         left: 20,
@@ -378,7 +311,6 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          // Page Indicators
           Positioned(
             bottom: 12,
             left: 0,
@@ -519,29 +451,93 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.8,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: _filteredProducts.length,
-            itemBuilder: (context, index) {
-              final product = _filteredProducts[index];
-              return _buildEnhancedProductCard(product);
+          Consumer<ProductProvider>(
+            builder: (context, productProvider, child) {
+              if (productProvider.isLoading) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              if (productProvider.error != null) {
+                return Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error loading products',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.red,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: () => productProvider.loadProducts(),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final filteredProducts = _getFilteredProducts(productProvider.products);
+
+              if (filteredProducts.isEmpty) {
+                return Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.coffee_outlined,
+                        size: 64,
+                        color: AppTheme.charcoalGray.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No products found',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: AppTheme.charcoalGray,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.8,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: filteredProducts.length,
+                itemBuilder: (context, index) {
+                  final product = filteredProducts[index];
+                  return _buildEnhancedProductCard(product);
+                },
+              );
             },
           ),
-          const SizedBox(height: 100), // Space for FAB
+          const SizedBox(height: 100),
         ],
       ),
     );
   }
 
-  Widget _buildEnhancedProductCard(Map<String, dynamic> product) {
-    final bool isAvailable = product['isAvailable'] ?? true;
+  Widget _buildEnhancedProductCard(ProductModel product) {
+    final bool isAvailable = product.stock;
     
     return GestureDetector(
       onTap: () {
@@ -584,24 +580,53 @@ class _HomeScreenState extends State<HomeScreen> {
                           top: Radius.circular(24),
                         ),
                       ),
-                      child: Center(
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Center(
-                            child: Text(
-                              product['image'],
-                              style: const TextStyle(fontSize: 40),
-                            ),
-                          ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
                         ),
+                        child: product.image != null && product.image!.isNotEmpty
+                            ? Image.network(
+                                context.read<ProductProvider>().getImageUrl(product),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Center(
+                                    child: Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.9),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.image_rounded,
+                                          size: 40,
+                                          color: AppTheme.charcoalGray,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Center(
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.coffee_rounded,
+                                      size: 40,
+                                      color: AppTheme.charcoalGray,
+                                    ),
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
-                    // Out of stock overlay
                     if (!isAvailable)
                       Positioned.fill(
                         child: ClipRRect(
@@ -660,10 +685,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Product name with overflow protection
                       Flexible(
                         child: Text(
-                          product['name'],
+                          product.name,
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
@@ -674,13 +698,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // Price and button row with overflow protection
                       Row(
                         children: [
-                          // Price with flexible width
                           Expanded(
                             child: Text(
-                              'Rp ${product['price']}',
+                              'Rp ${product.price}',
                               style: GoogleFonts.oswald(
                                 color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
                                 fontWeight: FontWeight.bold,
@@ -690,7 +712,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Add button with fixed size
                           Container(
                             width: 36,
                             height: 36,

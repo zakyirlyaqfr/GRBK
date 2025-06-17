@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'dart:ui';
 import '../cart/cart_screen.dart';
 import '../../utils/app_theme.dart';
+import '../../models/product_model.dart';
+import '../../providers/product_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> product;
+  final ProductModel product;
 
   const ProductDetailScreen({super.key, required this.product});
 
@@ -13,23 +16,24 @@ class ProductDetailScreen extends StatefulWidget {
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerProviderStateMixin {
+class _ProductDetailScreenState extends State<ProductDetailScreen>
+    with TickerProviderStateMixin {
   int _quantity = 1;
   String _selectedTemperature = 'Hot';
   String _selectedSweetness = 'Normal';
   final TextEditingController _specialNotesController = TextEditingController();
-  
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  
+
   final List<String> _temperatures = ['Hot', 'Iced'];
   final List<String> _sweetness = ['Less Sweet', 'Normal', 'Extra Sweet'];
 
-  bool get _isAvailable => widget.product['isAvailable'] ?? true;
+  bool get _isAvailable => widget.product.stock;
 
   int get _totalPrice {
-    int basePrice = widget.product['price'];
+    int basePrice = widget.product.price;
     return basePrice * _quantity;
   }
 
@@ -40,7 +44,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -48,7 +52,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
@@ -56,7 +60,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       parent: _animationController,
       curve: Curves.easeOutCubic,
     ));
-    
+
     _animationController.forward();
   }
 
@@ -73,7 +77,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       backgroundColor: AppTheme.softWhite,
       body: CustomScrollView(
         slivers: [
-          // Enhanced App Bar
           SliverAppBar(
             expandedHeight: 350,
             pinned: true,
@@ -121,7 +124,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const CartScreen()),
+                      MaterialPageRoute(
+                          builder: (context) => const CartScreen()),
                     );
                   },
                   icon: const Icon(
@@ -132,8 +136,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
               ),
             ],
           ),
-          
-          // Content Section
           SliverToBoxAdapter(
             child: FadeTransition(
               opacity: _fadeAnimation,
@@ -145,7 +147,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
           ),
         ],
       ),
-      // Enhanced Bottom Bar
       bottomNavigationBar: _buildEnhancedBottomBar(),
     );
   }
@@ -157,7 +158,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       ),
       child: Stack(
         children: [
-          // Background Pattern
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -173,19 +173,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
               ),
             ),
           ),
-          
-          // Product Image with availability overlay
           Center(
             child: Hero(
-              tag: widget.product['name'],
+              tag: widget.product.name,
               child: Stack(
                 children: [
                   Container(
-                    width: 160,
-                    height: 160,
+                    width: double.infinity, // Mengisi lebar penuh
+                    height: 350, // Sesuaikan dengan expandedHeight SliverAppBar
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(80),
                       boxShadow: [
                         BoxShadow(
                           color: AppTheme.richBlack.withValues(alpha: 0.2),
@@ -194,50 +191,61 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: Text(
-                        widget.product['image'],
-                        style: const TextStyle(fontSize: 80),
-                      ),
-                    ),
+                    child: widget.product.image != null &&
+                            widget.product.image!.isNotEmpty
+                        ? Image.network(
+                            context
+                                .read<ProductProvider>()
+                                .getImageUrl(widget.product),
+                            fit: BoxFit.cover, // Mengisi container secara penuh
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Center(
+                                child: Icon(
+                                  Icons.coffee_rounded,
+                                  size: 80,
+                                  color: Colors.white,
+                                ),
+                              );
+                            },
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.coffee_rounded,
+                              size: 80,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
-                  // Out of stock blur overlay
                   if (!_isAvailable)
                     Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(80),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(80),
-                            ),
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, 
-                                  vertical: 8
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.9),
-                                  borderRadius: BorderRadius.circular(25),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.red.withValues(alpha: 0.4),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  'NOT AVAILABLE',
-                                  style: GoogleFonts.oswald(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1,
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.5),
+                          ),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(25),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withValues(alpha: 0.4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
                                   ),
+                                ],
+                              ),
+                              child: Text(
+                                'NOT AVAILABLE',
+                                style: GoogleFonts.oswald(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
                                 ),
                               ),
                             ),
@@ -265,35 +273,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product Header
             _buildProductHeader(),
-            
             const SizedBox(height: 24),
-            
-            // Description
             _buildDescriptionSection(),
-            
             const SizedBox(height: 32),
-            
-            // Temperature Selection (disabled if not available)
             _buildTemperatureSection(),
-            
             const SizedBox(height: 24),
-            
-            // Sweetness Selection (disabled if not available)
             _buildSweetnessSection(),
-            
             const SizedBox(height: 24),
-            
-            // Special Notes (disabled if not available)
             _buildSpecialNotesSection(),
-            
             const SizedBox(height: 32),
-            
-            // Quantity Section (disabled if not available)
             _buildQuantitySection(),
-            
-            const SizedBox(height: 100), // Space for bottom bar
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -309,21 +300,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.product['name'],
+                widget.product.name,
                 style: GoogleFonts.oswald(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                  color:
+                      _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
                   letterSpacing: 0.5,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Rp ${widget.product['price']}',
+                'Rp ${widget.product.price}',
                 style: GoogleFonts.oswald(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                  color:
+                      _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
                 ),
               ),
             ],
@@ -332,8 +325,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            gradient: _isAvailable 
-                ? AppTheme.accentGradient 
+            gradient: _isAvailable
+                ? AppTheme.accentGradient
                 : LinearGradient(
                     colors: [
                       AppTheme.charcoalGray.withValues(alpha: 0.6),
@@ -341,16 +334,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                     ],
                   ),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: _isAvailable ? [
-              BoxShadow(
-                color: AppTheme.deepNavy.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ] : [],
+            boxShadow: _isAvailable
+                ? [
+                    BoxShadow(
+                      color: AppTheme.deepNavy.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
           ),
           child: Text(
-            widget.product['category'],
+            widget.product.category,
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 12,
@@ -380,18 +375,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
           decoration: BoxDecoration(
             color: _isAvailable ? Colors.white : AppTheme.softWhite,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: _isAvailable ? [
-              BoxShadow(
-                color: AppTheme.deepNavy.withValues(alpha: 0.05),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ] : [],
+            boxShadow: _isAvailable
+                ? [
+                    BoxShadow(
+                      color: AppTheme.deepNavy.withValues(alpha: 0.05),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : [],
           ),
           child: Text(
-            widget.product['description'],
+            widget.product.description,
             style: GoogleFonts.poppins(
-              color: _isAvailable ? AppTheme.charcoalGray : AppTheme.charcoalGray.withValues(alpha: 0.7),
+              color: _isAvailable
+                  ? AppTheme.charcoalGray
+                  : AppTheme.charcoalGray.withValues(alpha: 0.7),
               fontSize: 15,
               height: 1.6,
               fontWeight: FontWeight.w400,
@@ -408,7 +407,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       Icons.thermostat_rounded,
       _temperatures,
       _selectedTemperature,
-      (value) => _isAvailable ? setState(() => _selectedTemperature = value) : null,
+      (value) =>
+          _isAvailable ? setState(() => _selectedTemperature = value) : null,
     );
   }
 
@@ -418,7 +418,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       Icons.favorite_rounded,
       _sweetness,
       _selectedSweetness,
-      (value) => _isAvailable ? setState(() => _selectedSweetness = value) : null,
+      (value) =>
+          _isAvailable ? setState(() => _selectedSweetness = value) : null,
     );
   }
 
@@ -437,8 +438,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                gradient: _isAvailable 
-                    ? AppTheme.primaryGradient 
+                gradient: _isAvailable
+                    ? AppTheme.primaryGradient
                     : LinearGradient(
                         colors: [
                           AppTheme.charcoalGray.withValues(alpha: 0.5),
@@ -474,31 +475,42 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
               onTap: onChanged != null ? () => onChanged(option) : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: isSelected && _isAvailable ? AppTheme.primaryGradient : null,
-                  color: isSelected && _isAvailable ? null : (_isAvailable ? Colors.white : AppTheme.softWhite),
+                  gradient: isSelected && _isAvailable
+                      ? AppTheme.primaryGradient
+                      : null,
+                  color: isSelected && _isAvailable
+                      ? null
+                      : (_isAvailable ? Colors.white : AppTheme.softWhite),
                   borderRadius: BorderRadius.circular(25),
                   border: Border.all(
-                    color: isSelected && _isAvailable 
-                        ? Colors.transparent 
-                        : (_isAvailable ? AppTheme.warmBeige : AppTheme.charcoalGray.withValues(alpha: 0.3)),
+                    color: isSelected && _isAvailable
+                        ? Colors.transparent
+                        : (_isAvailable
+                            ? AppTheme.warmBeige
+                            : AppTheme.charcoalGray.withValues(alpha: 0.3)),
                     width: 2,
                   ),
-                  boxShadow: isSelected && _isAvailable ? [
-                    BoxShadow(
-                      color: AppTheme.deepNavy.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ] : [],
+                  boxShadow: isSelected && _isAvailable
+                      ? [
+                          BoxShadow(
+                            color: AppTheme.deepNavy.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : [],
                 ),
                 child: Text(
                   option,
                   style: GoogleFonts.poppins(
-                    color: isSelected && _isAvailable 
-                        ? Colors.white 
-                        : (_isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray.withValues(alpha: 0.7)),
+                    color: isSelected && _isAvailable
+                        ? Colors.white
+                        : (_isAvailable
+                            ? AppTheme.deepNavy
+                            : AppTheme.charcoalGray.withValues(alpha: 0.7)),
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
                   ),
@@ -520,8 +532,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                gradient: _isAvailable 
-                    ? AppTheme.accentGradient 
+                gradient: _isAvailable
+                    ? AppTheme.accentGradient
                     : LinearGradient(
                         colors: [
                           AppTheme.charcoalGray.withValues(alpha: 0.5),
@@ -552,29 +564,33 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
           decoration: BoxDecoration(
             color: _isAvailable ? Colors.white : AppTheme.softWhite,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: _isAvailable ? [
-              BoxShadow(
-                color: AppTheme.deepNavy.withValues(alpha: 0.05),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ] : [],
+            boxShadow: _isAvailable
+                ? [
+                    BoxShadow(
+                      color: AppTheme.deepNavy.withValues(alpha: 0.05),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : [],
           ),
           child: TextField(
             controller: _specialNotesController,
             enabled: _isAvailable,
             maxLines: 3,
             style: GoogleFonts.poppins(
-              color: _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray.withValues(alpha: 0.7),
+              color: _isAvailable
+                  ? AppTheme.deepNavy
+                  : AppTheme.charcoalGray.withValues(alpha: 0.7),
               fontSize: 14,
               fontWeight: FontWeight.w400,
             ),
             decoration: InputDecoration(
-              hintText: _isAvailable 
+              hintText: _isAvailable
                   ? 'Add any special instructions for your order...'
                   : 'Product not available for customization',
               hintStyle: GoogleFonts.poppins(
-                color: _isAvailable 
+                color: _isAvailable
                     ? AppTheme.charcoalGray.withValues(alpha: 0.7)
                     : AppTheme.charcoalGray.withValues(alpha: 0.5),
                 fontSize: 14,
@@ -597,8 +613,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: _isAvailable 
-            ? AppTheme.lightGradient 
+        gradient: _isAvailable
+            ? AppTheme.lightGradient
             : LinearGradient(
                 colors: [
                   AppTheme.softWhite,
@@ -606,13 +622,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 ],
               ),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: _isAvailable ? [
-          BoxShadow(
-            color: AppTheme.deepNavy.withValues(alpha: 0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ] : [],
+        boxShadow: _isAvailable
+            ? [
+                BoxShadow(
+                  color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : [],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -625,7 +643,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 style: GoogleFonts.oswald(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                  color:
+                      _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
                 ),
               ),
               const SizedBox(height: 12),
@@ -633,13 +652,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 children: [
                   _buildQuantityButton(
                     Icons.remove_rounded,
-                    _isAvailable && _quantity > 1 
-                        ? () => setState(() => _quantity--) 
+                    _isAvailable && _quantity > 1
+                        ? () => setState(() => _quantity--)
                         : null,
                   ),
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: _isAvailable ? Colors.white : AppTheme.softWhite,
                       borderRadius: BorderRadius.circular(12),
@@ -649,7 +669,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                       style: GoogleFonts.oswald(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                        color: _isAvailable
+                            ? AppTheme.deepNavy
+                            : AppTheme.charcoalGray,
                       ),
                     ),
                   ),
@@ -668,7 +690,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 'Total Price',
                 style: GoogleFonts.poppins(
                   fontSize: 14,
-                  color: _isAvailable ? AppTheme.charcoalGray : AppTheme.charcoalGray.withValues(alpha: 0.7),
+                  color: _isAvailable
+                      ? AppTheme.charcoalGray
+                      : AppTheme.charcoalGray.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -678,7 +702,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 style: GoogleFonts.oswald(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                  color:
+                      _isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
                 ),
               ),
             ],
@@ -695,8 +720,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          gradient: onPressed != null 
-              ? AppTheme.primaryGradient 
+          gradient: onPressed != null
+              ? AppTheme.primaryGradient
               : LinearGradient(
                   colors: [
                     AppTheme.charcoalGray.withValues(alpha: 0.3),
@@ -704,13 +729,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                   ],
                 ),
           borderRadius: BorderRadius.circular(12),
-          boxShadow: onPressed != null ? [
-            BoxShadow(
-              color: AppTheme.deepNavy.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ] : [],
+          boxShadow: onPressed != null
+              ? [
+                  BoxShadow(
+                    color: AppTheme.deepNavy.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [],
         ),
         child: Icon(
           icon,
@@ -739,14 +766,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
         child: Row(
           children: [
             const SizedBox(width: 16),
-            
-            // Add to Cart Button
             Expanded(
               child: Container(
                 height: 56,
                 decoration: BoxDecoration(
-                  gradient: _isAvailable 
-                      ? AppTheme.primaryGradient 
+                  gradient: _isAvailable
+                      ? AppTheme.primaryGradient
                       : LinearGradient(
                           colors: [
                             AppTheme.charcoalGray.withValues(alpha: 0.6),
@@ -754,13 +779,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                           ],
                         ),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: _isAvailable ? [
-                    BoxShadow(
-                      color: AppTheme.deepNavy.withValues(alpha: 0.4),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
-                  ] : [],
+                  boxShadow: _isAvailable
+                      ? [
+                          BoxShadow(
+                            color: AppTheme.deepNavy.withValues(alpha: 0.4),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ]
+                      : [],
                 ),
                 child: ElevatedButton(
                   onPressed: _isAvailable ? _addToCart : null,
@@ -775,7 +802,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        _isAvailable ? Icons.shopping_cart_rounded : Icons.block_rounded,
+                        _isAvailable
+                            ? Icons.shopping_cart_rounded
+                            : Icons.block_rounded,
                         color: Colors.white,
                         size: 24,
                       ),
@@ -802,10 +831,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
 
   void _addToCart() {
     if (!_isAvailable) return;
-    
+
     // ignore: unused_local_variable
     final orderDetails = {
-      'product': widget.product['name'],
+      'product': widget.product.name,
       'quantity': _quantity,
       'temperature': _selectedTemperature,
       'sweetness': _selectedSweetness,
@@ -813,7 +842,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
       'totalPrice': _totalPrice,
     };
 
-    // Show success dialog
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -843,7 +871,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 ),
               ),
               const SizedBox(height: 20),
-              
               Text(
                 'Added to Cart!',
                 style: GoogleFonts.oswald(
@@ -853,9 +880,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
                 ),
               ),
               const SizedBox(height: 8),
-              
               Text(
-                '${widget.product['name']} has been added to your cart',
+                '${widget.product.name} has been added to your cart',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   color: AppTheme.charcoalGray,
@@ -865,23 +891,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with TickerPr
               const SizedBox(height: 24),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  // ignore: unused_element
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: AppTheme.deepNavy,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
         ),
       ),
     );

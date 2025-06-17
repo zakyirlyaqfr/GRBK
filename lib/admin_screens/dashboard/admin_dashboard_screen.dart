@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'dart:ui';
 import '../../utils/app_theme.dart';
+import '../../providers/product_provider.dart';
+import '../../models/product_model.dart';
 import '../menu/menu_management_screen.dart';
 import '../stock/stock_management_screen.dart';
 import '../users/user_management_screen.dart';
@@ -26,7 +29,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late Animation<Offset> _sidebarSlideAnimation;
   late Animation<double> _overlayOpacityAnimation;
 
-  // Updated categories to match home_screen.dart
   final List<String> _categories = [
     'All',
     'Kopi Susu',
@@ -35,59 +37,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Milk Base',
     'Tea Series',
     'Food'
-  ];
-
-  // Updated products to match home_screen.dart structure
-  final List<Map<String, dynamic>> _products = [
-    {
-      'name': 'GRBK Special Blend',
-      'price': 35000,
-      'image': '☕',
-      'category': 'Kopi Susu',
-      'description':
-          'Our signature specialty coffee blend with notes of chocolate and caramel',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Single Origin Americano',
-      'price': 25000,
-      'image': '☕',
-      'category': 'Basic Espresso',
-      'description': 'Bold and smooth americano from single origin beans',
-      'isAvailable': false,
-    },
-    {
-      'name': 'Matcha Latte',
-      'price': 30000,
-      'image': '🍵',
-      'category': 'Milk Base',
-      'description': 'Premium matcha with creamy milk foam',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Lemon Mint Refresher',
-      'price': 28000,
-      'image': '🍋',
-      'category': 'Sparkling Fruity',
-      'description': 'Fresh lemon with mint leaves, perfect for hot days',
-      'isAvailable': false,
-    },
-    {
-      'name': 'Earl Grey Tea',
-      'price': 22000,
-      'image': '🫖',
-      'category': 'Tea Series',
-      'description': 'Classic earl grey with bergamot essence',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Artisan Croissant',
-      'price': 18000,
-      'image': '🥐',
-      'category': 'Food',
-      'description': 'Buttery croissant baked fresh daily',
-      'isAvailable': false,
-    },
   ];
 
   final List<Map<String, dynamic>> _menuItems = [
@@ -126,6 +75,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProductProvider>().loadProducts();
+    });
 
     _sidebarController = AnimationController(
       duration: const Duration(milliseconds: 250),
@@ -188,19 +141,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   void _selectMenuItem(int index) {
     setState(() {
       _selectedIndex = index;
-      _isSidebarOpen = false; // Auto close sidebar
+      _isSidebarOpen = false;
     });
     _sidebarController.reverse();
     _overlayController.reverse();
-  }
-
-  List<Map<String, dynamic>> get _filteredProducts {
-    if (_selectedCategory == 'All') {
-      return _products;
-    }
-    return _products
-        .where((product) => product['category'] == _selectedCategory)
-        .toList();
   }
 
   @override
@@ -209,15 +153,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       backgroundColor: AppTheme.softWhite,
       body: Stack(
         children: [
-          // Main Content with Gesture Detection
           GestureDetector(
             onTap: _isSidebarOpen ? _closeSidebar : null,
             child: AbsorbPointer(
-              absorbing:
-                  _isSidebarOpen, // Disable interactions when sidebar is open
+              absorbing: _isSidebarOpen,
               child: Column(
                 children: [
-                  // Top Bar - Optimized for iPhone 14 Pro Max
                   Container(
                     height: 100,
                     padding: const EdgeInsets.only(
@@ -238,7 +179,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     child: Row(
                       children: [
-                        // Hamburger Menu Button
                         Container(
                           width: 36,
                           height: 36,
@@ -265,7 +205,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
                         const SizedBox(width: 12),
 
-                        // Title
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,7 +234,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                   ),
 
-                  // Content
                   Expanded(
                     child: _buildScreenContent(),
                   ),
@@ -304,7 +242,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
           ),
 
-          // Overlay when sidebar is open
           AnimatedBuilder(
             animation: _overlayOpacityAnimation,
             builder: (context, child) {
@@ -324,7 +261,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             },
           ),
 
-          // Animated Sidebar
           SlideTransition(
             position: _sidebarSlideAnimation,
             child: _buildSidebar(),
@@ -351,12 +287,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       child: SafeArea(
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // Logo
                   Container(
                     width: 50,
                     height: 50,
@@ -391,7 +325,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ),
             ),
 
-            // Menu Items
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -466,7 +399,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ),
             ),
 
-            // Footer
             Container(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -576,161 +508,199 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Widget _buildDashboardContent() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Statistics Cards
-          Container(
-            height: 200,
+    return Consumer<ProductProvider>(
+      builder: (context, productProvider, child) {
+        if (productProvider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (productProvider.error != null) {
+          return Center(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Baris pertama
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Total Produk',
-                          '${_products.length}',
-                          Icons.inventory_rounded,
-                          AppTheme.primaryGradient,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Stok Tersedia',
-                          '${_products.where((p) => p['isAvailable']).length}',
-                          Icons.check_circle_rounded,
-                          const LinearGradient(
-                            colors: [Color(0xFF4CAF50), Color(0xFF8BC34A)],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red.withValues(alpha: 0.5),
                 ),
-                const SizedBox(height: 12),
-                // Baris kedua
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Stok Habis',
-                          '${_products.where((p) => !p['isAvailable']).length}',
-                          Icons.warning_rounded,
-                          const LinearGradient(
-                            colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Kategori',
-                          '${_categories.length - 1}',
-                          Icons.category_rounded,
-                          AppTheme.accentGradient,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 16),
+                Text(
+                  'Error: ${productProvider.error}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: Colors.red,
                   ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => productProvider.loadProducts(),
+                  child: const Text('Retry'),
                 ),
               ],
             ),
-          ),
+          );
+        }
 
-          const SizedBox(height: 24),
+        final filteredProducts = _getFilteredProducts(productProvider.products);
 
-          // Product Section Header
-          Text(
-            'Our Products',
-            style: GoogleFonts.oswald(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.deepNavy,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Categories
-          Container(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final category = _categories[index];
-                final isSelected = _selectedCategory == category;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedCategory = category),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: isSelected ? AppTheme.primaryGradient : null,
-                      color: isSelected ? null : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isSelected
-                            ? Colors.transparent
-                            : AppTheme.warmBeige,
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isSelected
-                              ? AppTheme.deepNavy.withValues(alpha: 0.2)
-                              : Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        category,
-                        style: GoogleFonts.poppins(
-                          color: isSelected ? Colors.white : AppTheme.deepNavy,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 200,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              'Total Produk',
+                              '${productProvider.products.length}',
+                              Icons.inventory_rounded,
+                              AppTheme.primaryGradient,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              'Stok Tersedia',
+                              '${productProvider.availableProducts.length}',
+                              Icons.check_circle_rounded,
+                              const LinearGradient(
+                                colors: [Color(0xFF4CAF50), Color(0xFF8BC34A)],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              'Stok Habis',
+                              '${productProvider.unavailableProducts.length}',
+                              Icons.warning_rounded,
+                              const LinearGradient(
+                                colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              'Kategori',
+                              '${_categories.length - 1}',
+                              Icons.category_rounded,
+                              AppTheme.accentGradient,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              Text(
+                'Our Products',
+                style: GoogleFonts.oswald(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.deepNavy,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              SizedBox(
+                height: 40,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _categories.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final category = _categories[index];
+                    final isSelected = _selectedCategory == category;
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedCategory = category),
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: isSelected ? AppTheme.primaryGradient : null,
+                          color: isSelected ? null : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.transparent
+                                : AppTheme.warmBeige,
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isSelected
+                                  ? AppTheme.deepNavy.withValues(alpha: 0.2)
+                                  : Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            category,
+                            style: GoogleFonts.poppins(
+                              color: isSelected ? Colors.white : AppTheme.deepNavy,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.8,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: filteredProducts.length,
+                itemBuilder: (context, index) {
+                  final product = filteredProducts[index];
+                  return _buildEnhancedProductCard(product);
+                },
+              ),
+
+              const SizedBox(height: 20),
+            ],
           ),
-
-          const SizedBox(height: 16),
-
-          // Product Grid
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.8,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: _filteredProducts.length,
-            itemBuilder: (context, index) {
-              final product = _filteredProducts[index];
-              return _buildEnhancedProductCard(product);
-            },
-          ),
-
-          const SizedBox(height: 20),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
+    if (_selectedCategory == 'All') return products;
+    return products.where((product) => product.category == _selectedCategory).toList();
   }
 
   Widget _buildStatCard(
@@ -794,8 +764,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildEnhancedProductCard(Map<String, dynamic> product) {
-    final bool isAvailable = product['isAvailable'] ?? true;
+  Widget _buildEnhancedProductCard(ProductModel product) {
+    final bool isAvailable = product.stock;
 
     return Container(
       decoration: BoxDecoration(
@@ -829,21 +799,51 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         top: Radius.circular(24),
                       ),
                     ),
-                    child: Center(
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Center(
-                          child: Text(
-                            product['image'],
-                            style: const TextStyle(fontSize: 40),
-                          ),
-                        ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
                       ),
+                      child: product.image != null && product.image!.isNotEmpty
+                          ? Image.network(
+                              context.read<ProductProvider>().getImageUrl(product),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.coffee_rounded,
+                                        size: 40,
+                                        color: AppTheme.charcoalGray,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : Center(
+                              child: Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.coffee_rounded,
+                                    size: 40,
+                                    color: AppTheme.charcoalGray,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                   if (!isAvailable)
@@ -902,7 +902,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      product['name'],
+                      product.name,
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -915,7 +915,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     const Spacer(),
                     Text(
-                      'Rp ${product['price']}',
+                      'Rp ${product.price}',
                       style: GoogleFonts.oswald(
                         color: isAvailable
                             ? AppTheme.deepNavy

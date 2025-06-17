@@ -4,7 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:math';
 import 'dart:async';
 import '../../utils/app_theme.dart';
-import '../../user_screens/orders/history_screen.dart';
+import '../../user_screens/home/home_screen.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -467,7 +467,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                             child: Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.note_rounded,
                                   size: 14,
                                   color: AppTheme.charcoalGray,
@@ -1025,8 +1025,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           // Simulate cashier confirmation after 8 seconds (for demo purposes)
-          if (confirmationTimer == null) {
-            confirmationTimer = Timer(const Duration(seconds: 8), () {
+          confirmationTimer ??= Timer(const Duration(seconds: 8), () {
               if (mounted) {
                 setDialogState(() {
                   isPaymentConfirmed = true;
@@ -1035,7 +1034,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 _showPaymentConfirmedAnimation();
               }
             });
-          }
           
           return Dialog(
             shape: RoundedRectangleBorder(
@@ -1158,7 +1156,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.error_outline_rounded,
                                   size: 48,
                                   color: AppTheme.charcoalGray,
@@ -1381,7 +1379,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         // Navigate to standalone HistoryScreen without bottom navigation
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(
-                            builder: (context) => const HistoryScreen(),
+                            builder: (context) => const HomeScreen(),
                           ),
                           (route) => route.isFirst, // Keep only the first route (home)
                         );

@@ -1,11 +1,13 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:provider/provider.dart';
 import 'package:universal_html/html.dart' as html;
-import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart' show kIsWeb;
-import '../../utils/app_theme.dart';
+import '../../../utils/app_theme.dart';
+import '../../../providers/product_provider.dart';
+import '../../../models/product_model.dart';
 
 class MenuManagementScreen extends StatefulWidget {
   const MenuManagementScreen({super.key});
@@ -29,105 +31,12 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     'Food'
   ];
 
-  final List<Map<String, dynamic>> _menuItems = [
-    {
-      'id': '1',
-      'name': 'GRBK Special Blend',
-      'price': 35000,
-      'image': 'assets/images/coffee1.jpg', // Changed to image path
-      'category': 'Kopi Susu',
-      'description': 'Our signature specialty coffee blend with notes of chocolate and caramel',
-      'isAvailable': true,
-    },
-    {
-      'id': '2',
-      'name': 'Single Origin Americano',
-      'price': 25000,
-      'image': 'assets/images/coffee2.jpg',
-      'category': 'Basic Espresso',
-      'description': 'Bold and smooth americano from single origin beans',
-      'isAvailable': false,
-    },
-    {
-      'id': '3',
-      'name': 'Matcha Latte',
-      'price': 30000,
-      'image': 'assets/images/matcha.jpg',
-      'category': 'Milk Base',
-      'description': 'Premium matcha with creamy milk foam',
-      'isAvailable': true,
-    },
-    {
-      'id': '4',
-      'name': 'Lemon Mint Refresher',
-      'price': 28000,
-      'image': 'assets/images/lemon.jpg',
-      'category': 'Sparkling Fruity',
-      'description': 'Fresh lemon with mint leaves, perfect for hot days',
-      'isAvailable': true,
-    },
-    {
-      'id': '5',
-      'name': 'Earl Grey Tea',
-      'price': 22000,
-      'image': 'assets/images/tea.jpg',
-      'category': 'Tea Series',
-      'description': 'Classic earl grey with bergamot essence',
-      'isAvailable': true,
-    },
-    {
-      'id': '6',
-      'name': 'Artisan Croissant',
-      'price': 18000,
-      'image': 'assets/images/croissant.jpg',
-      'category': 'Food',
-      'description': 'Buttery croissant baked fresh daily',
-      'isAvailable': false,
-    },
-  ];
-
-  List<Map<String, dynamic>> get _filteredMenuItems {
-    List<Map<String, dynamic>> filtered = _menuItems;
-    
-    if (_selectedCategory != 'All') {
-      filtered = filtered.where((item) => item['category'] == _selectedCategory).toList();
-    }
-    
-    if (_searchController.text.isNotEmpty) {
-      filtered = filtered.where((item) => 
-        item['name'].toLowerCase().contains(_searchController.text.toLowerCase())
-      ).toList();
-    }
-    
-    return filtered;
-  }
-
-  String? _webImageUrl;
-
-  Future<void> _pickImage(Function(String) onImageSelected) async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 80,
-      );
-      
-      if (image != null) {
-        if (kIsWeb) {
-          // Handle web platform
-          final bytes = await image.readAsBytes();
-          final blob = html.Blob([bytes]);
-          _webImageUrl = html.Url.createObjectUrlFromBlob(blob);
-          onImageSelected(image.path); // Still pass the path for consistency
-        } else {
-          // Handle native platforms
-          onImageSelected(image.path);
-        }
-      }
-    } catch (e) {
-      _showErrorSnackBar('Gagal memilih gambar: $e');
-    }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProductProvider>().loadProducts();
+    });
   }
 
   @override
@@ -139,17 +48,10 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header - Responsive
               _buildResponsiveHeader(constraints),
-              
               SizedBox(height: constraints.maxHeight > 700 ? 24 : 16),
-              
-              // Search and Filter - Responsive
               _buildSearchAndFilter(constraints),
-              
               SizedBox(height: constraints.maxHeight > 700 ? 20 : 16),
-              
-              // Menu List - Responsive with proper constraints
               Expanded(
                 child: _buildMenuList(constraints),
               ),
@@ -162,7 +64,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   Widget _buildResponsiveHeader(BoxConstraints constraints) {
     if (constraints.maxWidth < 600) {
-      // Mobile layout - Stack vertically
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -190,7 +91,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         ],
       );
     } else {
-      // Desktop layout - Side by side
       return Row(
         children: [
           Expanded(
@@ -255,7 +155,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   Widget _buildSearchAndFilter(BoxConstraints constraints) {
     if (constraints.maxWidth < 600) {
-      // Mobile - Stack vertically
       return Column(
         children: [
           _buildSearchField(constraints),
@@ -264,7 +163,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         ],
       );
     } else {
-      // Desktop - Side by side
       return Row(
         children: [
           Expanded(flex: 2, child: _buildSearchField(constraints)),
@@ -363,46 +261,98 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Widget _buildMenuList(BoxConstraints constraints) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.deepNavy.withValues(alpha: 0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: EdgeInsets.all(constraints.maxWidth < 400 ? 12 : 16),
-            decoration: const BoxDecoration(
-              gradient: AppTheme.lightGradient,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: _buildTableHeader(constraints),
-          ),
-          
-          // Content with proper scrolling
-          Expanded(
-            child: _filteredMenuItems.isEmpty 
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: EdgeInsets.all(constraints.maxWidth < 400 ? 12 : 16),
-                    itemCount: _filteredMenuItems.length,
-                    itemBuilder: (context, index) {
-                      final item = _filteredMenuItems[index];
-                      return _buildMenuRow(item, index, constraints);
-                    },
+    return Consumer<ProductProvider>(
+      builder: (context, productProvider, child) {
+        if (productProvider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (productProvider.error != null) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red.withValues(alpha: 0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error: ${productProvider.error}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: Colors.red,
                   ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => productProvider.loadProducts(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final filteredProducts = _getFilteredProducts(productProvider.products);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-        ],
-      ),
+          child: Column(
+            children: [
+              Container(
+                padding: EdgeInsets.all(constraints.maxWidth < 400 ? 12 : 16),
+                decoration: const BoxDecoration(
+                  gradient: AppTheme.lightGradient,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: _buildTableHeader(constraints),
+              ),
+              Expanded(
+                child: filteredProducts.isEmpty 
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: EdgeInsets.all(constraints.maxWidth < 400 ? 12 : 16),
+                        itemCount: filteredProducts.length,
+                        itemBuilder: (context, index) {
+                          final product = filteredProducts[index];
+                          return _buildMenuRow(product, index, constraints);
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
+  }
+
+  List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
+    List<ProductModel> filtered = products;
+    
+    if (_selectedCategory != 'All') {
+      filtered = filtered.where((product) => product.category == _selectedCategory).toList();
+    }
+    
+    if (_searchController.text.isNotEmpty) {
+      filtered = filtered.where((product) => 
+        product.name.toLowerCase().contains(_searchController.text.toLowerCase())
+      ).toList();
+    }
+    
+    return filtered;
   }
 
   Widget _buildTableHeader(BoxConstraints constraints) {
@@ -525,7 +475,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 
-  Widget _buildMenuRow(Map<String, dynamic> item, int index, BoxConstraints constraints) {
+  Widget _buildMenuRow(ProductModel product, int index, BoxConstraints constraints) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: EdgeInsets.all(constraints.maxWidth < 400 ? 10 : 12),
@@ -535,38 +485,25 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         border: Border.all(color: AppTheme.warmBeige.withValues(alpha: 0.3)),
       ),
       child: constraints.maxWidth < 600 
-          ? _buildMobileMenuRow(item, constraints)
-          : _buildDesktopMenuRow(item, constraints),
+          ? _buildMobileMenuRow(product, constraints)
+          : _buildDesktopMenuRow(product, constraints),
     );
   }
 
-  Widget _buildMobileMenuRow(Map<String, dynamic> item, BoxConstraints constraints) {
+  Widget _buildMobileMenuRow(ProductModel product, BoxConstraints constraints) {
     return Column(
       children: [
         Row(
           children: [
-            // Image
-            Container(
-              width: constraints.maxWidth < 400 ? 35 : 40,
-              height: constraints.maxWidth < 400 ? 35 : 40,
-              decoration: BoxDecoration(
-                gradient: AppTheme.lightGradient,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _buildMenuImage(item['image']),
-              ),
-            ),
+            _buildProductImage(product, constraints.maxWidth < 400 ? 35 : 40),
             const SizedBox(width: 8),
-            // Menu Info
             Expanded(
               flex: 2,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item['name'],
+                    product.name,
                     style: GoogleFonts.poppins(
                       fontSize: constraints.maxWidth < 400 ? 11 : 12,
                       fontWeight: FontWeight.bold,
@@ -576,7 +513,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    item['category'],
+                    product.category,
                     style: GoogleFonts.poppins(
                       fontSize: constraints.maxWidth < 400 ? 9 : 10,
                       color: AppTheme.charcoalGray,
@@ -587,10 +524,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 ],
               ),
             ),
-            // Price
             Expanded(
               child: Text(
-                'Rp ${item['price']}',
+                'Rp ${product.price}',
                 style: GoogleFonts.oswald(
                   fontSize: constraints.maxWidth < 400 ? 11 : 12,
                   fontWeight: FontWeight.bold,
@@ -598,41 +534,28 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 ),
               ),
             ),
-            // Actions
-            _buildActionMenu(item),
+            _buildActionMenu(product),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildDesktopMenuRow(Map<String, dynamic> item, BoxConstraints constraints) {
+  Widget _buildDesktopMenuRow(ProductModel product, BoxConstraints constraints) {
     return Row(
       children: [
-        // Menu Item Info
         Expanded(
           flex: 2,
           child: Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.lightGradient,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: _buildMenuImage(item['image']),
-                ),
-              ),
+              _buildProductImage(product, 40),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item['name'],
+                      product.name,
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -642,7 +565,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      item['description'],
+                      product.description,
                       style: GoogleFonts.poppins(
                         fontSize: 10,
                         color: AppTheme.charcoalGray,
@@ -656,8 +579,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             ],
           ),
         ),
-        
-        // Category
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -666,7 +587,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              item['category'],
+              product.category,
               style: GoogleFonts.poppins(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
@@ -678,11 +599,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             ),
           ),
         ),
-        
-        // Price
         Expanded(
           child: Text(
-            'Rp ${item['price']}',
+            'Rp ${product.price}',
             style: GoogleFonts.oswald(
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -690,33 +609,47 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             ),
           ),
         ),
-        
-        // Actions
-        _buildActionMenu(item),
+        _buildActionMenu(product),
       ],
     );
   }
 
-  Widget _buildMenuImage(String imagePath) {
-    // For demo purposes, show a placeholder. In real app, use Image.file() or Image.network()
+  Widget _buildProductImage(ProductModel product, double size) {
     return Container(
+      width: size,
+      height: size,
       decoration: BoxDecoration(
-        color: AppTheme.warmBeige.withValues(alpha: 0.3),
+        gradient: AppTheme.lightGradient,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Icon(
-        Icons.image_rounded,
-        color: AppTheme.charcoalGray,
-        size: 20,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: product.image != null && product.image!.isNotEmpty
+            ? Image.network(
+                context.read<ProductProvider>().getImageUrl(product),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.image_rounded,
+                    color: AppTheme.charcoalGray,
+                    size: 20,
+                  );
+                },
+              )
+            : const Icon(
+                Icons.image_rounded,
+                color: AppTheme.charcoalGray,
+                size: 20,
+              ),
       ),
     );
   }
 
-  Widget _buildActionMenu(Map<String, dynamic> item) {
+  Widget _buildActionMenu(ProductModel product) {
     return SizedBox(
       width: 40,
       child: PopupMenuButton<String>(
-        onSelected: (value) => _handleMenuAction(value, item),
+        onSelected: (value) => _handleMenuAction(value, product),
         itemBuilder: (context) => [
           PopupMenuItem(
             value: 'edit',
@@ -750,45 +683,67 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 
-  void _handleMenuAction(String action, Map<String, dynamic> item) {
+  void _handleMenuAction(String action, ProductModel product) {
     switch (action) {
       case 'edit':
-        _showEditMenuDialog(item);
+        _showEditMenuDialog(product);
         break;
       case 'delete':
-        _showDeleteConfirmDialog(item);
+        _showDeleteConfirmDialog(product);
         break;
     }
   }
 
-  Widget _buildImageDisplay(String? imagePath) {
-    if (kIsWeb && _webImageUrl != null) {
-      // Web platform with selected image
-      return Image.network(
-        _webImageUrl!,
-        fit: BoxFit.cover,
-      );
-    } else if (imagePath != null) {
-      // Native platforms or default image
-      if (imagePath.startsWith('assets/')) {
-        return Image.asset(
-          imagePath,
-          fit: BoxFit.cover,
-        );
+  // Updated image picker method with web support
+  // ignore: unused_element
+  Future<void> _pickImage(Function(File?) onImageSelected) async {
+    try {
+      if (kIsWeb) {
+        // Web platform - use HTML file input
+        final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
+        uploadInput.accept = 'image/*';
+        uploadInput.click();
+
+        uploadInput.onChange.listen((e) {
+          final files = uploadInput.files;
+          if (files!.isNotEmpty) {
+            final file = files[0];
+            final reader = html.FileReader();
+            
+            reader.onLoadEnd.listen((e) {
+              // For web, we'll pass null as File and handle the data differently
+              // You might want to create a custom class to handle web files
+              onImageSelected(null);
+              // Store the file data for web upload
+              _handleWebImageFile(file, reader.result as String);
+            });
+            
+            reader.readAsDataUrl(file);
+          }
+        });
       } else {
-        return Image.file(
-          File(imagePath),
-          fit: BoxFit.cover,
+        // Mobile/Desktop platform - use ImagePicker
+        final XFile? image = await _imagePicker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 800,
+          maxHeight: 800,
+          imageQuality: 80,
         );
+        
+        if (image != null) {
+          onImageSelected(File(image.path));
+        }
       }
-    } else {
-      // No image selected
-      return const Icon(
-        Icons.image_rounded,
-        size: 40,
-        color: AppTheme.charcoalGray,
-      );
+    } catch (e) {
+      _showErrorSnackBar('Gagal memilih gambar: $e');
     }
+  }
+
+  // Handle web image file data
+  void _handleWebImageFile(html.File file, String dataUrl) {
+    // Store the web file data for later use
+    // You can implement this based on your needs
+    debugPrint('Web image selected: ${file.name}, size: ${file.size}');
   }
 
   void _showAddMenuDialog() {
@@ -796,7 +751,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     final priceController = TextEditingController();
     final descriptionController = TextEditingController();
     String selectedCategory = 'Kopi Susu';
-    String? selectedImagePath;
+    File? selectedImageFile;
+    String? webImageData; // For web platform
 
     showDialog(
       context: context,
@@ -814,7 +770,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
                   children: [
                     Container(
@@ -858,13 +813,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 
                 const SizedBox(height: 24),
                 
-                // Form
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Image Upload Section
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(20),
@@ -885,25 +838,34 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: selectedImagePath != null
-                                    ? _buildImageDisplay(selectedImagePath)
-                                    : const Icon(
-                                        Icons.image_rounded,
-                                        size: 40,
-                                        color: AppTheme.charcoalGray,
-                                      ),
+                                  child: selectedImageFile != null
+                                    ? Image.file(
+                                        selectedImageFile!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : webImageData != null
+                                      ? Image.network(
+                                          webImageData!,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : const Icon(
+                                          Icons.image_rounded,
+                                          size: 40,
+                                          color: AppTheme.charcoalGray,
+                                        ),
                                 ),
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
-                                onPressed: () => _pickImage((path) {
+                                onPressed: () => _pickImageForDialog((file, webData) {
                                   setDialogState(() {
-                                    selectedImagePath = path;
+                                    selectedImageFile = file;
+                                    webImageData = webData;
                                   });
                                 }),
                                 icon: const Icon(Icons.camera_alt_rounded, size: 18),
                                 label: Text(
-                                  selectedImagePath != null ? 'Ganti Gambar' : 'Pilih Gambar',
+                                  (selectedImageFile != null || webImageData != null) ? 'Ganti Gambar' : 'Pilih Gambar',
                                   style: GoogleFonts.poppins(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -924,7 +886,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         
                         const SizedBox(height: 20),
                         
-                        // Form Fields
                         _buildDialogTextField('Nama Menu', nameController, Icons.restaurant_menu_rounded),
                         const SizedBox(height: 16),
                         
@@ -934,7 +895,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         _buildDialogTextField('Deskripsi', descriptionController, Icons.description_rounded, maxLines: 3),
                         const SizedBox(height: 16),
                         
-                        // Category Dropdown
                         DropdownButtonFormField<String>(
                           value: selectedCategory,
                           onChanged: (value) => setDialogState(() => selectedCategory = value!),
@@ -944,11 +904,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             prefixIcon: const Icon(Icons.category_rounded, color: AppTheme.charcoalGray, size: 20),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: AppTheme.warmBeige),
+                              borderSide: const BorderSide(color: AppTheme.warmBeige),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: AppTheme.deepNavy, width: 2),
+                              borderSide: const BorderSide(color: AppTheme.deepNavy, width: 2),
                             ),
                             filled: true,
                             fillColor: Colors.white,
@@ -971,7 +931,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 
                 const SizedBox(height: 24),
                 
-                // Buttons
                 Row(
                   children: [
                     Expanded(
@@ -981,7 +940,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: AppTheme.charcoalGray),
+                            side: const BorderSide(color: AppTheme.charcoalGray),
                           ),
                         ),
                         child: Text(
@@ -996,43 +955,56 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (nameController.text.isNotEmpty && 
-                              priceController.text.isNotEmpty &&
-                              selectedImagePath != null) {
-                            setState(() {
-                              _menuItems.add({
-                                'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                                'name': nameController.text,
-                                'price': int.tryParse(priceController.text) ?? 0,
-                                'image': selectedImagePath!,
-                                'category': selectedCategory,
-                                'description': descriptionController.text,
-                                'isAvailable': true,
-                              });
-                            });
-                            Navigator.pop(context);
-                            _showSuccessSnackBar('Menu baru berhasil ditambahkan!');
-                          } else {
-                            _showErrorSnackBar('Mohon lengkapi semua field dan pilih gambar');
-                          }
+                      child: Consumer<ProductProvider>(
+                        builder: (context, productProvider, child) {
+                          return ElevatedButton(
+                            onPressed: productProvider.isLoading ? null : () async {
+                              if (nameController.text.isNotEmpty && 
+                                  priceController.text.isNotEmpty) {
+                                final success = await productProvider.createProduct(
+                                  name: nameController.text,
+                                  price: int.tryParse(priceController.text) ?? 0,
+                                  category: selectedCategory,
+                                  description: descriptionController.text,
+                                  imageFile: selectedImageFile,
+                                );
+                                
+                                if (success) {
+                                  Navigator.pop(context);
+                                  _showSuccessSnackBar('Menu baru berhasil ditambahkan!');
+                                } else {
+                                  _showErrorSnackBar(productProvider.error ?? 'Gagal menambahkan menu');
+                                }
+                              } else {
+                                _showErrorSnackBar('Mohon lengkapi semua field wajib');
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.deepNavy,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: productProvider.isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    'Tambah Menu',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                          );
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.deepNavy,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Tambah Menu',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
                       ),
                     ),
                   ],
@@ -1045,12 +1017,53 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 
-  void _showEditMenuDialog(Map<String, dynamic> item) {
-    final nameController = TextEditingController(text: item['name']);
-    final priceController = TextEditingController(text: item['price'].toString());
-    final descriptionController = TextEditingController(text: item['description']);
-    String selectedCategory = item['category'];
-    String? selectedImagePath = item['image'];
+  // Updated image picker for dialog with web support
+  Future<void> _pickImageForDialog(Function(File?, String?) onImageSelected) async {
+    try {
+      if (kIsWeb) {
+        // Web platform - use HTML file input
+        final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
+        uploadInput.accept = 'image/*';
+        uploadInput.click();
+
+        uploadInput.onChange.listen((e) {
+          final files = uploadInput.files;
+          if (files!.isNotEmpty) {
+            final file = files[0];
+            final reader = html.FileReader();
+            
+            reader.onLoadEnd.listen((e) {
+              onImageSelected(null, reader.result as String);
+            });
+            
+            reader.readAsDataUrl(file);
+          }
+        });
+      } else {
+        // Mobile/Desktop platform - use ImagePicker
+        final XFile? image = await _imagePicker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 800,
+          maxHeight: 800,
+          imageQuality: 80,
+        );
+        
+        if (image != null) {
+          onImageSelected(File(image.path), null);
+        }
+      }
+    } catch (e) {
+      _showErrorSnackBar('Gagal memilih gambar: $e');
+    }
+  }
+
+  void _showEditMenuDialog(ProductModel product) {
+    final nameController = TextEditingController(text: product.name);
+    final priceController = TextEditingController(text: product.price.toString());
+    final descriptionController = TextEditingController(text: product.description);
+    String selectedCategory = product.category;
+    File? selectedImageFile;
+    String? webImageData;
 
     showDialog(
       context: context,
@@ -1068,7 +1081,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
                   children: [
                     Container(
@@ -1112,13 +1124,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 
                 const SizedBox(height: 24),
                 
-                // Form (same structure as add dialog)
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Image Upload Section
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(20),
@@ -1139,20 +1149,41 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: selectedImagePath != null
-                                    ? _buildImageDisplay(selectedImagePath)
-                                    : const Icon(
-                                        Icons.image_rounded,
-                                        size: 40,
-                                        color: AppTheme.charcoalGray,
-                                      ),
+                                  child: selectedImageFile != null
+                                    ? Image.file(
+                                        selectedImageFile!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : webImageData != null
+                                      ? Image.network(
+                                          webImageData!,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : (product.image != null && product.image!.isNotEmpty
+                                          ? Image.network(
+                                              context.read<ProductProvider>().getImageUrl(product),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) {
+                                                return const Icon(
+                                                  Icons.image_rounded,
+                                                  size: 40,
+                                                  color: AppTheme.charcoalGray,
+                                                );
+                                              },
+                                            )
+                                          : const Icon(
+                                              Icons.image_rounded,
+                                              size: 40,
+                                              color: AppTheme.charcoalGray,
+                                            )),
                                 ),
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
-                                onPressed: () => _pickImage((path) {
+                                onPressed: () => _pickImageForDialog((file, webData) {
                                   setDialogState(() {
-                                    selectedImagePath = path;
+                                    selectedImageFile = file;
+                                    webImageData = webData;
                                   });
                                 }),
                                 icon: const Icon(Icons.camera_alt_rounded, size: 18),
@@ -1178,7 +1209,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         
                         const SizedBox(height: 20),
                         
-                        // Form Fields
                         _buildDialogTextField('Nama Menu', nameController, Icons.restaurant_menu_rounded),
                         const SizedBox(height: 16),
                         
@@ -1188,7 +1218,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         _buildDialogTextField('Deskripsi', descriptionController, Icons.description_rounded, maxLines: 3),
                         const SizedBox(height: 16),
                         
-                        // Category Dropdown
                         DropdownButtonFormField<String>(
                           value: selectedCategory,
                           onChanged: (value) => setDialogState(() => selectedCategory = value!),
@@ -1198,11 +1227,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             prefixIcon: const Icon(Icons.category_rounded, color: AppTheme.charcoalGray, size: 20),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: AppTheme.warmBeige),
+                              borderSide: const BorderSide(color: AppTheme.warmBeige),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: AppTheme.deepNavy, width: 2),
+                              borderSide: const BorderSide(color: AppTheme.deepNavy, width: 2),
                             ),
                             filled: true,
                             fillColor: Colors.white,
@@ -1225,7 +1254,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 
                 const SizedBox(height: 24),
                 
-                // Buttons
                 Row(
                   children: [
                     Expanded(
@@ -1235,7 +1263,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: AppTheme.charcoalGray),
+                            side: const BorderSide(color: AppTheme.charcoalGray),
                           ),
                         ),
                         child: Text(
@@ -1250,39 +1278,57 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (nameController.text.isNotEmpty && 
-                              priceController.text.isNotEmpty &&
-                              selectedImagePath != null) {
-                            setState(() {
-                              item['name'] = nameController.text;
-                              item['price'] = int.tryParse(priceController.text) ?? 0;
-                              item['description'] = descriptionController.text;
-                              item['category'] = selectedCategory;
-                              item['image'] = selectedImagePath!;
-                            });
-                            Navigator.pop(context);
-                            _showSuccessSnackBar('Menu berhasil diperbarui!');
-                          } else {
-                            _showErrorSnackBar('Mohon lengkapi semua field');
-                          }
+                      child: Consumer<ProductProvider>(
+                        builder: (context, productProvider, child) {
+                          return ElevatedButton(
+                            onPressed: productProvider.isLoading ? null : () async {
+                              if (nameController.text.isNotEmpty && 
+                                  priceController.text.isNotEmpty) {
+                                final success = await productProvider.updateProduct(
+                                  id: product.id,
+                                  name: nameController.text,
+                                  price: int.tryParse(priceController.text) ?? 0,
+                                  category: selectedCategory,
+                                  description: descriptionController.text,
+                                  imageFile: selectedImageFile,
+                                );
+                                
+                                if (success) {
+                                  Navigator.pop(context);
+                                  _showSuccessSnackBar('Menu berhasil diperbarui!');
+                                } else {
+                                  _showErrorSnackBar(productProvider.error ?? 'Gagal memperbarui menu');
+                                }
+                              } else {
+                                _showErrorSnackBar('Mohon lengkapi semua field wajib');
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.deepNavy,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: productProvider.isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    'Simpan Perubahan',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                          );
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.deepNavy,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Simpan Perubahan',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
                       ),
                     ),
                   ],
@@ -1295,7 +1341,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 
-  void _showDeleteConfirmDialog(Map<String, dynamic> item) {
+  void _showDeleteConfirmDialog(ProductModel product) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -1325,7 +1371,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Apakah Anda yakin ingin menghapus "${item['name']}"? Tindakan ini tidak dapat dibatalkan.',
+                'Apakah Anda yakin ingin menghapus "${product.name}"? Tindakan ini tidak dapat dibatalkan.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   color: AppTheme.charcoalGray,
@@ -1343,7 +1389,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: AppTheme.charcoalGray),
+                          side: const BorderSide(color: AppTheme.charcoalGray),
                         ),
                       ),
                       child: Text(
@@ -1358,29 +1404,45 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _menuItems.removeWhere((menuItem) => menuItem['id'] == item['id']);
-                        });
-                        Navigator.pop(context);
-                        _showSuccessSnackBar('Menu berhasil dihapus!');
+                    child: Consumer<ProductProvider>(
+                      builder: (context, productProvider, child) {
+                        return ElevatedButton(
+                          onPressed: productProvider.isLoading ? null : () async {
+                            final success = await productProvider.deleteProduct(product.id);
+                            
+                            if (success) {
+                              Navigator.pop(context);
+                              _showSuccessSnackBar('Menu berhasil dihapus!');
+                            } else {
+                              _showErrorSnackBar(productProvider.error ?? 'Gagal menghapus menu');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: productProvider.isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  'Hapus',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                        );
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        'Hapus',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -1404,11 +1466,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         prefixIcon: Icon(icon, color: AppTheme.charcoalGray, size: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.warmBeige),
+          borderSide: const BorderSide(color: AppTheme.warmBeige),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.deepNavy, width: 2),
+          borderSide: const BorderSide(color: AppTheme.deepNavy, width: 2),
         ),
         filled: true,
         fillColor: Colors.white,

@@ -20,7 +20,7 @@ class _CashierScreenState extends State<CashierScreen>
   bool _orderFound = false;
   bool _isCameraInitialized = false;
   bool _isCameraPermissionGranted = false;
-  bool _isWebPlatform = kIsWeb;
+  final bool _isWebPlatform = kIsWeb;
 
   final TextEditingController _orderIdController = TextEditingController();
 
@@ -447,7 +447,7 @@ class _CashierScreenState extends State<CashierScreen>
             child: Column(
               children: [
                 // Scan Section - Fixed height to prevent overflow
-                Container(
+                SizedBox(
                   height: 320, // Fixed height
                   child: _buildScanSection(constraints),
                 ),
@@ -455,7 +455,7 @@ class _CashierScreenState extends State<CashierScreen>
                 const SizedBox(height: 16),
 
                 // Manual Input Section - Fixed height to prevent overflow
-                Container(
+                SizedBox(
                   height: 320, // Fixed height
                   child: _buildManualInputSection(constraints),
                 ),
@@ -727,11 +727,11 @@ class _CashierScreenState extends State<CashierScreen>
                     color: AppTheme.charcoalGray, size: 20),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: AppTheme.warmBeige),
+                  borderSide: const BorderSide(color: AppTheme.warmBeige),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: AppTheme.deepNavy, width: 2),
+                  borderSide: const BorderSide(color: AppTheme.deepNavy, width: 2),
                 ),
                 filled: true,
                 fillColor: AppTheme.softWhite,
@@ -923,7 +923,7 @@ class _CashierScreenState extends State<CashierScreen>
             SizedBox(height: isVerySmallScreen ? 8 : 12),
 
             // Order Items List - Fixed height container to prevent overflow
-            Container(
+            SizedBox(
               height: 120, // Fixed height
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 8),

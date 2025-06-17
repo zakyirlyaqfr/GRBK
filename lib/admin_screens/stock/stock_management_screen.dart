@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../../utils/app_theme.dart';
+import '../../../providers/product_provider.dart';
+import '../../../models/product_model.dart';
 
 class StockManagementScreen extends StatefulWidget {
   const StockManagementScreen({super.key});
@@ -22,62 +25,17 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
     'Food'
   ];
 
-  final List<Map<String, dynamic>> _products = [
-    {
-      'name': 'GRBK Special Blend',
-      'price': 35000,
-      'image': '☕',
-      'category': 'Kopi Susu',
-      'description': 'Our signature specialty coffee blend with notes of chocolate and caramel',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Single Origin Americano',
-      'price': 25000,
-      'image': '☕',
-      'category': 'Basic Espresso',
-      'description': 'Bold and smooth americano from single origin beans',
-      'isAvailable': false,
-    },
-    {
-      'name': 'Matcha Latte',
-      'price': 30000,
-      'image': '🍵',
-      'category': 'Milk Base',
-      'description': 'Premium matcha with creamy milk foam',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Lemon Mint Refresher',
-      'price': 28000,
-      'image': '🍋',
-      'category': 'Sparkling Fruity',
-      'description': 'Fresh lemon with mint leaves, perfect for hot days',
-      'isAvailable': false,
-    },
-    {
-      'name': 'Earl Grey Tea',
-      'price': 22000,
-      'image': '🫖',
-      'category': 'Tea Series',
-      'description': 'Classic earl grey with bergamot essence',
-      'isAvailable': true,
-    },
-    {
-      'name': 'Artisan Croissant',
-      'price': 18000,
-      'image': '🥐',
-      'category': 'Food',
-      'description': 'Buttery croissant baked fresh daily',
-      'isAvailable': false,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProductProvider>().loadProducts();
+    });
+  }
 
-  List<Map<String, dynamic>> get _filteredProducts {
-    if (_selectedCategory == 'All') {
-      return _products;
-    }
-    return _products.where((product) => product['category'] == _selectedCategory).toList();
+  List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
+    if (_selectedCategory == 'All') return products;
+    return products.where((product) => product.category == _selectedCategory).toList();
   }
 
   @override
@@ -87,7 +45,6 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Expanded(
@@ -146,46 +103,90 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
           
           const SizedBox(height: 20),
           
-          // Stock Summary Cards
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.2,
-            children: [
-              _buildStockSummaryCard(
-                'Total Produk',
-                _products.length.toString(),
-                Icons.inventory_2_rounded,
-                AppTheme.primaryGradient,
-              ),
-              _buildStockSummaryCard(
-                'Stok Tersedia',
-                _products.where((p) => p['isAvailable']).length.toString(),
-                Icons.check_circle_rounded,
-                const LinearGradient(colors: [Colors.green, Colors.lightGreen]),
-              ),
-              _buildStockSummaryCard(
-                'Stok Habis',
-                _products.where((p) => !p['isAvailable']).length.toString(),
-                Icons.cancel_rounded,
-                const LinearGradient(colors: [Colors.red, Colors.redAccent]),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Categories
-          _buildCategories(),
-          
-          const SizedBox(height: 16),
-          
-          // Products Grid
-          Expanded(
-            child: _buildProductsGrid(),
+          Consumer<ProductProvider>(
+            builder: (context, productProvider, child) {
+              if (productProvider.isLoading) {
+                return const Expanded(
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (productProvider.error != null) {
+                return Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red.withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error: ${productProvider.error}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.red,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => productProvider.loadProducts(),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Expanded(
+                child: Column(
+                  children: [
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 1.2,
+                      children: [
+                        _buildStockSummaryCard(
+                          'Total Produk',
+                          productProvider.products.length.toString(),
+                          Icons.inventory_2_rounded,
+                          AppTheme.primaryGradient,
+                        ),
+                        _buildStockSummaryCard(
+                          'Stok Tersedia',
+                          productProvider.availableProducts.length.toString(),
+                          Icons.check_circle_rounded,
+                          const LinearGradient(colors: [Colors.green, Colors.lightGreen]),
+                        ),
+                        _buildStockSummaryCard(
+                          'Stok Habis',
+                          productProvider.unavailableProducts.length.toString(),
+                          Icons.cancel_rounded,
+                          const LinearGradient(colors: [Colors.red, Colors.redAccent]),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    
+                    _buildCategories(),
+                    
+                    const SizedBox(height: 16),
+                    
+                    Expanded(
+                      child: _buildProductsGrid(productProvider),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -286,7 +287,32 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
     );
   }
 
-  Widget _buildProductsGrid() {
+  Widget _buildProductsGrid(ProductProvider productProvider) {
+    final filteredProducts = _getFilteredProducts(productProvider.products);
+
+    if (filteredProducts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inventory_outlined,
+              size: 64,
+              color: AppTheme.charcoalGray.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No products found',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: AppTheme.charcoalGray,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
@@ -294,16 +320,16 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
-      itemCount: _filteredProducts.length,
+      itemCount: filteredProducts.length,
       itemBuilder: (context, index) {
-        final product = _filteredProducts[index];
-        return _buildStockProductCard(product, index);
+        final product = filteredProducts[index];
+        return _buildStockProductCard(product, productProvider);
       },
     );
   }
 
-  Widget _buildStockProductCard(Map<String, dynamic> product, int index) {
-    final bool isAvailable = product['isAvailable'] ?? true;
+  Widget _buildStockProductCard(ProductModel product, ProductProvider productProvider) {
+    final bool isAvailable = product.stock;
     
     return Container(
       decoration: BoxDecoration(
@@ -337,23 +363,54 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                 ),
                 child: Stack(
                   children: [
-                    Center(
-                      child: Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text(
-                            product['image'],
-                            style: const TextStyle(fontSize: 24),
-                          ),
-                        ),
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
                       ),
+                      child: product.image != null && product.image!.isNotEmpty
+                          ? Image.network(
+                              productProvider.getImageUrl(product),
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.coffee_rounded,
+                                        size: 24,
+                                        color: AppTheme.charcoalGray,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : Center(
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.coffee_rounded,
+                                    size: 24,
+                                    color: AppTheme.charcoalGray,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
-                    // Stock Status Indicator
                     Positioned(
                       top: 8,
                       right: 8,
@@ -385,7 +442,7 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      product['name'],
+                      product.name,
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 11,
@@ -396,7 +453,7 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Rp ${product['price']}',
+                      'Rp ${product.price}',
                       style: GoogleFonts.oswald(
                         color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
                         fontWeight: FontWeight.bold,
@@ -405,7 +462,6 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                     ),
                     const Spacer(),
                     
-                    // Stock Toggle
                     Row(
                       children: [
                         Expanded(
@@ -422,11 +478,13 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                           scale: 0.7,
                           child: Switch(
                             value: isAvailable,
-                            onChanged: (value) {
-                              setState(() {
-                                product['isAvailable'] = value;
-                              });
-                              _showStockUpdateSnackBar(product['name'], value);
+                            onChanged: (value) async {
+                              final success = await productProvider.updateProductStock(product.id, value);
+                              if (success) {
+                                _showStockUpdateSnackBar(product.name, value);
+                              } else {
+                                _showErrorSnackBar(productProvider.error ?? 'Failed to update stock');
+                              }
                             },
                             activeColor: Colors.green,
                             inactiveThumbColor: Colors.red,
@@ -469,6 +527,21 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
