@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class PocketBaseService {
+  // Update this URL to match your PocketBase server
   static const String baseUrl = 'http://127.0.0.1:8090';
   static const String apiUrl = '$baseUrl/api';
   
@@ -381,4 +383,71 @@ class PocketBaseService {
 
   // Check if current user is admin
   bool get isAdmin => _currentUser?.admin == true;
+  
+  void setAuthToken(String token) {
+    _authToken = token;
+    debugPrint('Auth token set: ${token.substring(0, 10)}...');
+  }
+  
+  void clearAuthToken() {
+    _authToken = null;
+    debugPrint('Auth token cleared');
+  }
+  
+  // Test if PocketBase is running
+  static Future<bool> isServerRunning() async {
+    try {
+      // This is just a dummy check for demonstration.
+      // In a real app, you should use http.get(Uri.parse('$baseUrl/health')) or similar.
+      await Future.delayed(Duration(seconds: 1));
+      debugPrint('PocketBase server check: $baseUrl');
+      return true;
+    } catch (e) {
+      debugPrint('PocketBase server not running: $e');
+      return false;
+    }
+  }
+}
+
+extension PocketBaseTestUser on PocketBaseService {
+  Future<String?> getOrCreateTestUser() async {
+    const testEmail = 'testuser@grbk.com';
+    const testPassword = 'test1234';
+    const testName = 'Test User';
+
+    // 1. Try to find the test user
+    final findResponse = await http.get(
+      Uri.parse('${PocketBaseService.apiUrl}/collections/users/records?filter=(email="$testEmail")'),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (findResponse.statusCode == 200) {
+      final data = jsonDecode(findResponse.body);
+      final items = data['items'] as List<dynamic>? ?? [];
+      if (items.isNotEmpty) {
+        return items.first['id'] as String;
+      }
+    }
+
+    // 2. If not found, create the test user
+    final createResponse = await http.post(
+      Uri.parse('${PocketBaseService.apiUrl}/collections/users/records'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': testName,
+        'email': testEmail,
+        'password': testPassword,
+        'passwordConfirm': testPassword,
+        'admin': false,
+      }),
+    );
+
+    if (createResponse.statusCode == 200) {
+      final data = jsonDecode(createResponse.body);
+      return data['id'] as String;
+    }
+
+    // 3. If creation failed, return null
+    return null;
+  }
 }

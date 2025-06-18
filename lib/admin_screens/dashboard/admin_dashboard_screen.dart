@@ -8,7 +8,7 @@ import '../../models/product_model.dart';
 import '../menu/menu_management_screen.dart';
 import '../stock/stock_management_screen.dart';
 import '../users/user_management_screen.dart';
-import '../cashier/cashier_screen.dart';
+import '../cashier/cashier_management_screen.dart';
 import '../reports/reports_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -499,7 +499,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       case 3:
         return const UserManagementScreen();
       case 4:
-        return const CashierScreen();
+        return const CashierManagementScreen();
       case 5:
         return const ReportsScreen();
       default:

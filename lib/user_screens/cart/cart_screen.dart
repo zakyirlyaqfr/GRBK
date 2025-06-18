@@ -1,13 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'dart:math';
 import 'dart:async';
 import '../../utils/app_theme.dart';
 import '../../user_screens/home/home_screen.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/payment_provider.dart';
+import '../../models/payment_model.dart';
+import '../../utils/pocketbase_debug.dart';
+import '../../services/payment_service.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -20,6 +24,12 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  
+  // ignore: unused_field
+  PaymentModel? _currentPayment;
+  bool _isPaymentConfirmed = false;
+  Timer? _paymentStatusTimer;
+  bool _isCartClearing = false;
 
   @override
   void initState() {
@@ -56,28 +66,73 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _animationController.dispose();
+    _paymentStatusTimer?.cancel();
     super.dispose();
   }
 
-  // Generate random QR code data
-  String _generateRandomQRData() {
-    final random = Random();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final randomNumber = random.nextInt(999999);
-    final orderCode = 'GRBK${timestamp.toString().substring(8)}${randomNumber.toString().padLeft(6, '0')}';
-    
-    final cartProvider = context.read<CartProvider>();
-    
-    return '''
-{
-  "store": "GRBK Coffee Shop",
-  "order_id": "$orderCode",
-  "total": ${cartProvider.totalPrice},
-  "items": ${cartProvider.totalItems},
-  "timestamp": "$timestamp",
-  "payment_method": "cashier",
-  "status": "pending"
-}''';
+  // Generate QR code data with payment ID
+  String _generatePaymentQRData(String paymentId) {
+    return paymentId; // Simple QR code with just the payment ID
+  }
+
+  // Check payment status periodically and clear cart when confirmed
+  void _startPaymentStatusCheck(String paymentId) {
+    _paymentStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      final paymentProvider = context.read<PaymentProvider>();
+      final payment = await paymentProvider.getPaymentById(paymentId);
+      
+      if (payment != null && payment.status == 'confirmed') {
+        timer.cancel();
+        if (mounted) {
+          debugPrint('Payment confirmed! Clearing cart from database...');
+          
+          // Clear cart from database when payment is confirmed
+          await _clearCartFromDatabase(payment.userId);
+          
+          setState(() {
+            _isPaymentConfirmed = true;
+            _currentPayment = payment;
+          });
+          _showPaymentConfirmedAnimation();
+        }
+      }
+    });
+  }
+
+  // Clear cart items from database for the specific user
+  Future<void> _clearCartFromDatabase(String userId) async {
+    try {
+      setState(() {
+        _isCartClearing = true;
+      });
+
+      final cartProvider = context.read<CartProvider>();
+      
+      debugPrint('Clearing cart from database for user: $userId');
+      
+      // Use the CartProvider method to clear cart for the specific user
+      await cartProvider.clearCartForPayment(userId);
+      
+      debugPrint('✅ Cart cleared successfully from database');
+      
+    } catch (e) {
+      debugPrint('❌ Error clearing cart from database: $e');
+      // Show error but don't prevent the payment confirmation flow
+      if (mounted) {
+        _showErrorSnackBar('Cart cleared locally but may need manual cleanup in database');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCartClearing = false;
+        });
+      }
+    }
   }
 
   @override
@@ -269,55 +324,12 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                     ],
                   ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.neutralGradient,
-                            borderRadius: BorderRadius.circular(50),
-                          ),
-                          child: const Icon(
-                            Icons.shopping_cart_outlined,
-                            size: 50,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      // Floating coffee beans
-                      Positioned(
-                        top: 20,
-                        right: 20,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: AppTheme.warmBeige,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Center(
-                            child: Text('☕', style: TextStyle(fontSize: 12)),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 30,
-                        left: 15,
-                        child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: AppTheme.warmBeige,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Center(
-                            child: Text('☕', style: TextStyle(fontSize: 10)),
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: const Center(
+                    child: Icon(
+                      Icons.shopping_cart_outlined,
+                      size: 50,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 
@@ -1082,32 +1094,79 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _showPayAtCashierDialog() {
-    // Generate random QR code data each time the dialog is shown
-    final qrData = _generateRandomQRData();
-    final random = Random();
-    final orderNumber = 'GRBK${random.nextInt(9999).toString().padLeft(4, '0')}';
+  void _showPayAtCashierDialog() async {
+    // Debug PocketBase connection first
+    if (kDebugMode) {
+      await PocketBaseDebug.debugPocketBase();
+    }
+
+    // Create payment from cart items
+    final cartProvider = context.read<CartProvider>();
+    final paymentProvider = context.read<PaymentProvider>();
     
-    // Payment confirmation state
-    bool isPaymentConfirmed = false;
-    Timer? confirmationTimer;
+    // Test the payment service connection
+    final paymentService = PaymentService();
+    final connectionTest = await paymentService.testConnection();
+    
+    if (!connectionTest) {
+      _showErrorSnackBar('Cannot connect to server. Please check if PocketBase is running on http://127.0.0.1:8090');
+      return;
+    }
+    
+    // List collections for debugging
+    if (kDebugMode) {
+      await paymentService.listCollections();
+    }
+    
+    debugPrint('Creating payment from cart items');
+    debugPrint('Cart items count: ${cartProvider.cartItems.length}');
+    
+    // Validate cart items have user IDs
+    if (cartProvider.cartItems.isEmpty) {
+      _showErrorSnackBar('Cart is empty');
+      return;
+    }
+    
+    // Check user IDs in cart items
+    final userIds = cartProvider.cartItems.map((item) => item.usersId).toSet();
+    debugPrint('User IDs in cart: $userIds');
+    
+    if (userIds.isEmpty || userIds.contains('') || userIds.contains(null)) {
+      _showErrorSnackBar('Cart items are missing user information. Please refresh and try again.');
+      return;
+    }
+    
+    if (userIds.length > 1) {
+      _showErrorSnackBar('Cart contains items from multiple users. Please contact support.');
+      return;
+    }
+    
+    // Create payment using the updated method (no userId parameter needed)
+    final payment = await paymentProvider.createPaymentFromCart(
+      cartItems: cartProvider.cartItems,
+    );
+    
+    if (payment == null) {
+      final error = paymentProvider.error ?? 'Failed to create payment. Please check the console for details.';
+      _showErrorSnackBar(error);
+      return;
+    }
+    
+    setState(() {
+      _currentPayment = payment;
+      _isPaymentConfirmed = false;
+    });
+    
+    // Start checking payment status
+    _startPaymentStatusCheck(payment.id);
+    
+    if (!mounted) return;
     
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          // Simulate cashier confirmation after 8 seconds (for demo purposes)
-          confirmationTimer ??= Timer(const Duration(seconds: 8), () {
-              if (mounted) {
-                setDialogState(() {
-                  isPaymentConfirmed = true;
-                });
-                // Show confirmation animation
-                _showPaymentConfirmedAnimation();
-              }
-            });
-          
           return Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(32),
@@ -1127,379 +1186,400 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              child: Consumer<CartProvider>(
-                builder: (context, cartProvider, child) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Header with QR Icon
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          gradient: isPaymentConfirmed 
-                              ? const LinearGradient(
-                                  colors: [Colors.green, Colors.lightGreen],
-                                )
-                              : AppTheme.primaryGradient,
-                          borderRadius: BorderRadius.circular(40),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isPaymentConfirmed ? Colors.green : AppTheme.deepNavy)
-                                  .withValues(alpha: 0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header with QR Icon
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      gradient: _isPaymentConfirmed 
+                          ? const LinearGradient(
+                              colors: [Colors.green, Colors.lightGreen],
+                            )
+                          : AppTheme.primaryGradient,
+                      borderRadius: BorderRadius.circular(40),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isPaymentConfirmed ? Colors.green : AppTheme.deepNavy)
+                              .withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: _isCartClearing 
+                        ? const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 3,
+                            ),
+                          )
+                        : Icon(
+                            _isPaymentConfirmed ? Icons.check_circle_rounded : Icons.qr_code_rounded,
+                            color: Colors.white,
+                            size: 40,
+                          ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Title
+                  ShaderMask(
+                    shaderCallback: (bounds) => (_isPaymentConfirmed 
+                        ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                        : AppTheme.primaryGradient).createShader(bounds),
+                    child: Text(
+                      _isCartClearing 
+                          ? 'Clearing Cart...'
+                          : _isPaymentConfirmed 
+                              ? 'Payment Confirmed!' 
+                              : 'Payment QR Code',
+                      style: GoogleFonts.oswald(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Order Number
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Order #GRBK${payment.id.substring(0, 4).toUpperCase()}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.deepNavy,
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // QR Code or Success Message
+                  if (!_isPaymentConfirmed) ...[
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: QrImageView(
+                        data: _generatePaymentQRData(payment.id),
+                        version: QrVersions.auto,
+                        size: 200.0,
+                        backgroundColor: Colors.white,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: AppTheme.deepNavy,
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: AppTheme.deepNavy,
+                        ),
+                        gapless: false,
+                        errorStateBuilder: (cxt, err) {
+                          return Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              color: AppTheme.softWhite,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  size: 48,
+                                  color: AppTheme.charcoalGray,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'QR Code Error',
+                                  style: GoogleFonts.poppins(
+                                    color: AppTheme.charcoalGray,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ] else ...[
+                    // Success Animation
+                    Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(40),
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 50,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Payment Successful!',
+                            style: GoogleFonts.oswald(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Cart cleared from database',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppTheme.charcoalGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Instructions or Status
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                gradient: _isPaymentConfirmed 
+                                    ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                                    : AppTheme.accentGradient,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                _isPaymentConfirmed 
+                                    ? Icons.check_circle_outline_rounded
+                                    : Icons.info_outline_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isPaymentConfirmed ? 'Payment Status' : 'Payment Instructions',
+                              style: GoogleFonts.oswald(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
                             ),
                           ],
                         ),
-                        child: Icon(
-                          isPaymentConfirmed ? Icons.check_circle_rounded : Icons.qr_code_rounded,
-                          color: Colors.white,
-                          size: 40,
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Title
-                      ShaderMask(
-                        shaderCallback: (bounds) => (isPaymentConfirmed 
-                            ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                            : AppTheme.primaryGradient).createShader(bounds),
-                        child: Text(
-                          isPaymentConfirmed ? 'Payment Confirmed!' : 'Payment QR Code',
-                          style: GoogleFonts.oswald(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 8),
-                      
-                      // Order Number
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Order #$orderNumber',
+                        const SizedBox(height: 12),
+                        Text(
+                          _isPaymentConfirmed 
+                              ? 'Payment confirmed by cashier.\nCart has been cleared from database.\nYou can now continue shopping.'
+                              : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation\n4. Cart will be automatically cleared',
                           style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.deepNavy,
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // QR Code or Success Message
-                      if (!isPaymentConfirmed) ...[
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.deepNavy.withValues(alpha: 0.1),
-                                blurRadius: 15,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: QrImageView(
-                            data: qrData,
-                            version: QrVersions.auto,
-                            size: 200.0,
-                            backgroundColor: Colors.white,
-                            eyeStyle: const QrEyeStyle(
-                              eyeShape: QrEyeShape.square,
-                              color: AppTheme.deepNavy,
-                            ),
-                            dataModuleStyle: const QrDataModuleStyle(
-                              dataModuleShape: QrDataModuleShape.square,
-                              color: AppTheme.deepNavy,
-                            ),
-                            gapless: false,
-                            errorStateBuilder: (cxt, err) {
-                              return Container(
-                                width: 200,
-                                height: 200,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.softWhite,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.error_outline_rounded,
-                                      size: 48,
-                                      color: AppTheme.charcoalGray,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'QR Code Error',
-                                      style: GoogleFonts.poppins(
-                                        color: AppTheme.charcoalGray,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ] else ...[
-                        // Success Animation
-                        Container(
-                          width: 200,
-                          height: 200,
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: Colors.green.withValues(alpha: 0.3),
-                              width: 2,
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(40),
-                                ),
-                                child: const Icon(
-                                  Icons.check_rounded,
-                                  color: Colors.white,
-                                  size: 50,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Payment Successful!',
-                                style: GoogleFonts.oswald(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Your order is being prepared',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: AppTheme.charcoalGray,
-                                ),
-                              ),
-                            ],
+                            color: AppTheme.charcoalGray,
+                            fontSize: 13,
+                            height: 1.5,
                           ),
                         ),
                       ],
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Instructions or Status
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Order Summary
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.deepNavy.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
                         ),
-                        child: Column(
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    gradient: isPaymentConfirmed 
-                                        ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                                        : AppTheme.accentGradient,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    isPaymentConfirmed 
-                                        ? Icons.check_circle_outline_rounded
-                                        : Icons.info_outline_rounded,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  isPaymentConfirmed ? 'Payment Status' : 'Payment Instructions',
-                                  style: GoogleFonts.oswald(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.deepNavy,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
                             Text(
-                              isPaymentConfirmed 
-                                  ? 'Payment has been confirmed by cashier.\nYou can now continue to view your order history.'
-                                  : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation',
+                              'Total Items',
                               style: GoogleFonts.poppins(
+                                fontSize: 12,
                                 color: AppTheme.charcoalGray,
-                                fontSize: 13,
-                                height: 1.5,
+                              ),
+                            ),
+                            Text(
+                              '${payment.totalItems} items',
+                              style: GoogleFonts.oswald(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Order Summary
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.deepNavy.withValues(alpha: 0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Total Items',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: AppTheme.charcoalGray,
-                                  ),
-                                ),
-                                Text(
-                                  '${cartProvider.totalItems} items',
-                                  style: GoogleFonts.oswald(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.deepNavy,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Total Amount',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppTheme.charcoalGray,
+                              ),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  'Total Amount',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: AppTheme.charcoalGray,
-                                  ),
-                                ),
-                                Text(
-                                  'Rp ${cartProvider.totalPrice}',
-                                  style: GoogleFonts.oswald(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.deepNavy,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Rp ${payment.totalPrice}',
+                              style: GoogleFonts.oswald(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Continue Button
-                      Container(
-                        width: double.infinity,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          gradient: isPaymentConfirmed 
-                              ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                              : LinearGradient(
-                                  colors: [
-                                    AppTheme.charcoalGray.withValues(alpha: 0.5),
-                                    AppTheme.charcoalGray.withValues(alpha: 0.3),
-                                  ],
-                                ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: isPaymentConfirmed ? [
-                            BoxShadow(
-                              color: Colors.green.withValues(alpha: 0.3),
-                              blurRadius: 15,
-                              offset: const Offset(0, 8),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Continue Button
+                  Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: _isPaymentConfirmed 
+                          ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                          : LinearGradient(
+                              colors: [
+                                AppTheme.charcoalGray.withValues(alpha: 0.5),
+                                AppTheme.charcoalGray.withValues(alpha: 0.3),
+                              ],
                             ),
-                          ] : [],
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: _isPaymentConfirmed ? [
+                        BoxShadow(
+                          color: Colors.green.withValues(alpha: 0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 8),
                         ),
-                        child: ElevatedButton(
-                          onPressed: isPaymentConfirmed ? () {
-                            confirmationTimer?.cancel();
-                            Navigator.of(context).pop(); // Close the dialog
-                            cartProvider.clearCart(); // Clear the cart
-                            
-                            // Navigate to home screen
-                            Navigator.of(context).pushAndRemoveUntil(
-                              MaterialPageRoute(
-                                builder: (context) => const HomeScreen(),
-                              ),
-                              (route) => route.isFirst, // Keep only the first route (home)
-                            );
-                          } : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                      ] : [],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: (_isPaymentConfirmed && !_isCartClearing) ? () {
+                        _paymentStatusTimer?.cancel();
+                        Navigator.of(context).pop(); // Close the dialog
+                        
+                        // Navigate to home screen
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const HomeScreen(),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                isPaymentConfirmed 
-                                    ? Icons.receipt_long_rounded 
-                                    : Icons.hourglass_empty_rounded,
+                          (route) => route.isFirst, // Keep only the first route (home)
+                        );
+                      } : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isCartClearing) ...[
+                            const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
                                 color: Colors.white,
-                                size: 24,
+                                strokeWidth: 2,
                               ),
-                              const SizedBox(width: 12),
-                              Text(
-                                isPaymentConfirmed 
+                            ),
+                          ] else ...[
+                            Icon(
+                              _isPaymentConfirmed 
+                                  ? Icons.receipt_long_rounded 
+                                  : Icons.hourglass_empty_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ],
+                          const SizedBox(width: 12),
+                          Text(
+                            _isCartClearing 
+                                ? 'Clearing Cart...'
+                                : _isPaymentConfirmed 
                                     ? 'Continue' 
                                     : 'Waiting for Confirmation...',
-                                style: GoogleFonts.oswald(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
+                            style: GoogleFonts.oswald(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  );
-                },
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -1507,7 +1587,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       ),
     ).then((_) {
       // Clean up timer when dialog is closed
-      confirmationTimer?.cancel();
+      _paymentStatusTimer?.cancel();
     });
   }
 
@@ -1521,7 +1601,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
             const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
             Text(
-              'Payment confirmed by cashier!',
+              'Payment confirmed! Cart cleared from database.',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
             ),
           ],
@@ -1531,7 +1611,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -1544,6 +1624,22 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         backgroundColor: AppTheme.deepNavy,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),

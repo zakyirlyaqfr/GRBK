@@ -4,16 +4,20 @@ import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/payment_provider.dart';
+import '../../providers/cart_provider.dart';
+import '../../models/payment_model.dart';
 
-class CashierScreen extends StatefulWidget {
-  const CashierScreen({super.key});
+class CashierManagementScreen extends StatefulWidget {
+  const CashierManagementScreen({super.key});
 
   @override
-  State<CashierScreen> createState() => _CashierScreenState();
+  State<CashierManagementScreen> createState() => _CashierManagementScreenState();
 }
 
-class _CashierScreenState extends State<CashierScreen>
+class _CashierManagementScreenState extends State<CashierManagementScreen>
     with TickerProviderStateMixin {
   bool _isStarted = false;
   bool _isScanning = false;
@@ -30,17 +34,7 @@ class _CashierScreenState extends State<CashierScreen>
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
 
-  // Sample order data
-  final Map<String, dynamic> _sampleOrder = {
-    'orderId': 'GRBK2024001',
-    'customerName': 'Ahmad Rizki',
-    'items': [
-      {'name': 'GRBK Special Blend', 'quantity': 2, 'price': 35000},
-      {'name': 'Artisan Croissant', 'quantity': 1, 'price': 18000},
-    ],
-    'total': 88000,
-    'timestamp': '2024-12-16 14:30:00',
-  };
+  PaymentModel? _currentPayment;
 
   @override
   void initState() {
@@ -227,34 +221,39 @@ class _CashierScreenState extends State<CashierScreen>
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isSmallScreen = constraints.maxWidth < 600;
-        final isVerySmallScreen = constraints.maxWidth < 400;
+    return Scaffold(
+      backgroundColor: AppTheme.softWhite,
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isSmallScreen = constraints.maxWidth < 600;
+            final isVerySmallScreen = constraints.maxWidth < 400;
 
-        return Container(
-          padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header - Responsive
-              _buildResponsiveHeader(constraints),
+            return Container(
+              padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header - Responsive
+                  _buildResponsiveHeader(constraints),
 
-              SizedBox(height: isSmallScreen ? 16 : 20),
+                  SizedBox(height: isSmallScreen ? 16 : 20),
 
-              // Platform indicator for web
-              if (_isWebPlatform) _buildWebIndicator(),
+                  // Platform indicator for web
+                  if (_isWebPlatform) _buildWebIndicator(),
 
-              // Main Content - Responsive with proper constraints
-              Expanded(
-                child: _isStarted
-                    ? _buildCashierInterface(constraints)
-                    : _buildStartInterface(constraints),
+                  // Main Content - Responsive with proper constraints
+                  Expanded(
+                    child: _isStarted
+                        ? _buildCashierInterface(constraints)
+                        : _buildStartInterface(constraints),
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -429,7 +428,7 @@ class _CashierScreenState extends State<CashierScreen>
   }
 
   Widget _buildCashierInterface(BoxConstraints constraints) {
-    if (_orderFound) {
+    if (_orderFound && _currentPayment != null) {
       return _buildOrderDetails(constraints);
     }
 
@@ -640,7 +639,6 @@ class _CashierScreenState extends State<CashierScreen>
     final isVerySmallScreen = constraints.maxWidth < 400;
 
     return SingleChildScrollView(
-      // Membungkus dengan SingleChildScrollView
       child: Container(
         padding: EdgeInsets.all(isVerySmallScreen ? 16 : 20),
         decoration: BoxDecoration(
@@ -656,8 +654,7 @@ class _CashierScreenState extends State<CashierScreen>
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize
-              .min, // Menggunakan min agar kolom tidak memakan ruang berlebih
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Manual Input Icon
             Container(
@@ -715,8 +712,8 @@ class _CashierScreenState extends State<CashierScreen>
                 fontSize: isVerySmallScreen ? 13 : 14,
               ),
               decoration: InputDecoration(
-                labelText: 'Order ID',
-                hintText: 'Contoh: GRBK2024001',
+                labelText: 'Payment ID',
+                hintText: 'Masukkan Payment ID',
                 labelStyle: GoogleFonts.poppins(
                     color: AppTheme.charcoalGray,
                     fontSize: isVerySmallScreen ? 11 : 12),
@@ -833,7 +830,7 @@ class _CashierScreenState extends State<CashierScreen>
                         ),
                       ),
                       Text(
-                        'Order ID: ${_sampleOrder['orderId']}',
+                        'Payment ID: ${_currentPayment!.id}',
                         style: GoogleFonts.poppins(
                           fontSize: isVerySmallScreen ? 11 : 12,
                           color: AppTheme.charcoalGray,
@@ -846,6 +843,7 @@ class _CashierScreenState extends State<CashierScreen>
                   onPressed: () {
                     setState(() {
                       _orderFound = false;
+                      _currentPayment = null;
                       _orderIdController.clear();
                     });
                   },
@@ -873,7 +871,9 @@ class _CashierScreenState extends State<CashierScreen>
                     radius: isVerySmallScreen ? 16 : 20,
                     backgroundColor: AppTheme.deepNavy,
                     child: Text(
-                      _sampleOrder['customerName'][0],
+                      _currentPayment!.userName.isNotEmpty 
+                          ? _currentPayment!.userName[0].toUpperCase()
+                          : 'U',
                       style: GoogleFonts.oswald(
                         color: Colors.white,
                         fontSize: isVerySmallScreen ? 14 : 16,
@@ -887,7 +887,9 @@ class _CashierScreenState extends State<CashierScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _sampleOrder['customerName'],
+                          _currentPayment!.userName.isNotEmpty 
+                              ? _currentPayment!.userName 
+                              : 'Unknown Customer',
                           style: GoogleFonts.poppins(
                             fontSize: isVerySmallScreen ? 12 : 14,
                             fontWeight: FontWeight.bold,
@@ -895,7 +897,7 @@ class _CashierScreenState extends State<CashierScreen>
                           ),
                         ),
                         Text(
-                          _sampleOrder['timestamp'],
+                          '${_currentPayment!.created.day}/${_currentPayment!.created.month}/${_currentPayment!.created.year} ${_currentPayment!.created.hour}:${_currentPayment!.created.minute.toString().padLeft(2, '0')}',
                           style: GoogleFonts.poppins(
                             fontSize: isVerySmallScreen ? 9 : 10,
                             color: AppTheme.charcoalGray,
@@ -927,9 +929,9 @@ class _CashierScreenState extends State<CashierScreen>
               height: 120, // Fixed height
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 8),
-                itemCount: _sampleOrder['items'].length,
+                itemCount: _currentPayment!.items.length,
                 itemBuilder: (context, index) {
-                  final item = _sampleOrder['items'][index];
+                  final item = _currentPayment!.items[index];
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: EdgeInsets.all(isVerySmallScreen ? 10 : 12),
@@ -946,7 +948,7 @@ class _CashierScreenState extends State<CashierScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item['name'],
+                                item.productName,
                                 style: GoogleFonts.poppins(
                                   fontSize: isVerySmallScreen ? 11 : 12,
                                   fontWeight: FontWeight.bold,
@@ -954,7 +956,7 @@ class _CashierScreenState extends State<CashierScreen>
                                 ),
                               ),
                               Text(
-                                'Qty: ${item['quantity']}',
+                                'Qty: ${item.quantity}',
                                 style: GoogleFonts.poppins(
                                   fontSize: isVerySmallScreen ? 9 : 10,
                                   color: AppTheme.charcoalGray,
@@ -964,7 +966,7 @@ class _CashierScreenState extends State<CashierScreen>
                           ),
                         ),
                         Text(
-                          'Rp ${item['price'] * item['quantity']}',
+                          'Rp ${item.totalPrice}',
                           style: GoogleFonts.oswald(
                             fontSize: isVerySmallScreen ? 11 : 12,
                             fontWeight: FontWeight.bold,
@@ -999,7 +1001,7 @@ class _CashierScreenState extends State<CashierScreen>
                     ),
                   ),
                   Text(
-                    'Rp ${_sampleOrder['total']}',
+                    'Rp ${_currentPayment!.totalPrice}',
                     style: GoogleFonts.oswald(
                       fontSize: isVerySmallScreen ? 16 : 20,
                       fontWeight: FontWeight.bold,
@@ -1082,9 +1084,8 @@ class _CashierScreenState extends State<CashierScreen>
       Timer(const Duration(seconds: 3), () {
         if (_isScanning && mounted) {
           _stopScanning();
-          setState(() {
-            _orderFound = true;
-          });
+          // Simulate finding a payment (you would replace this with actual QR scanning logic)
+          _simulatePaymentFound();
         }
       });
     } else {
@@ -1096,9 +1097,7 @@ class _CashierScreenState extends State<CashierScreen>
           Timer(const Duration(seconds: 3), () {
             if (_isScanning && mounted) {
               _stopScanning();
-              setState(() {
-                _orderFound = true;
-              });
+              _simulatePaymentFound();
             }
           });
         } else {
@@ -1120,17 +1119,44 @@ class _CashierScreenState extends State<CashierScreen>
     _pulseController.stop();
   }
 
-  void _searchOrder() {
+  void _searchOrder() async {
     if (_orderIdController.text.isNotEmpty) {
-      setState(() {
-        _orderFound = true;
-      });
+      final paymentProvider = context.read<PaymentProvider>();
+      final payment = await paymentProvider.getPaymentById(_orderIdController.text.trim());
+      
+      if (payment != null) {
+        setState(() {
+          _currentPayment = payment;
+          _orderFound = true;
+        });
+      } else {
+        _showErrorSnackBar('Payment tidak ditemukan. Periksa kembali Payment ID.');
+      }
     } else {
-      _showErrorSnackBar('Masukkan Order ID terlebih dahulu');
+      _showErrorSnackBar('Masukkan Payment ID terlebih dahulu');
     }
   }
 
+  void _simulatePaymentFound() {
+    // This simulates finding a payment via QR scan
+    // In real implementation, you would parse the QR code data to get the payment ID
+    const String simulatedPaymentId = "sample_payment_id"; // Replace with actual scanned payment ID
+    
+    context.read<PaymentProvider>().getPaymentById(simulatedPaymentId).then((payment) {
+      if (payment != null && mounted) {
+        setState(() {
+          _currentPayment = payment;
+          _orderFound = true;
+        });
+      } else if (mounted) {
+        _showErrorSnackBar('Payment tidak ditemukan dari QR code');
+      }
+    });
+  }
+
   void _confirmPayment() {
+    if (_currentPayment == null) return;
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -1157,7 +1183,7 @@ class _CashierScreenState extends State<CashierScreen>
               ),
               const SizedBox(height: 12),
               Text(
-                'Pembayaran Dikonfirmasi!',
+                'Konfirmasi Pembayaran',
                 style: GoogleFonts.oswald(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1166,7 +1192,7 @@ class _CashierScreenState extends State<CashierScreen>
               ),
               const SizedBox(height: 6),
               Text(
-                'Pesanan ${_sampleOrder['orderId']} telah dikonfirmasi dan akan masuk ke laporan.',
+                'Apakah Anda yakin ingin mengkonfirmasi pembayaran untuk pesanan ini?',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   color: AppTheme.charcoalGray,
@@ -1174,31 +1200,59 @@ class _CashierScreenState extends State<CashierScreen>
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _orderFound = false;
-                    _orderIdController.clear();
-                  });
-                  _showSuccessSnackBar(_isWebPlatform
-                      ? 'Pembayaran berhasil dikonfirmasi! (Web Version)'
-                      : 'Pembayaran berhasil dikonfirmasi!');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                child: Text(
-                  'Selesai',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        'Batal',
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.charcoalGray,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        
+                        // Update payment status to confirmed
+                        final success = await context.read<PaymentProvider>()
+                            .updatePaymentStatus(_currentPayment!.id, 'confirmed');
+                        
+                        if (success) {
+                          // Clear cart items for this payment
+                          await context.read<CartProvider>().clearCartForPayment(_currentPayment!.userId);
+                          
+                          setState(() {
+                            _orderFound = false;
+                            _currentPayment = null;
+                            _orderIdController.clear();
+                          });
+                          _showSuccessSnackBar('Pembayaran berhasil dikonfirmasi!');
+                        } else {
+                          _showErrorSnackBar('Gagal mengkonfirmasi pembayaran');
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: Text(
+                        'Konfirmasi',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

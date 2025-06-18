@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../models/cart_model.dart';
 import '../services/cart_service.dart';
 import '../services/pocketbase_service.dart';
@@ -179,4 +180,33 @@ class CartProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  Future<void> clearCartForPayment(String userId) async {
+  try {
+    _isLoading = true;
+    notifyListeners();
+
+    // Clear all cart items for the user
+    final response = await http.delete(
+      Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(users_id="$userId")'),
+      headers: {
+        'Content-Type': 'application/json',
+        if ((_pocketBaseService.authToken ?? '').isNotEmpty)
+          'Authorization': 'Bearer ${_pocketBaseService.authToken}',
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      _cartItems.clear();
+      notifyListeners();
+    } else {
+      debugPrint('Error clearing cart: ${response.body}');
+    }
+  } catch (e) {
+    debugPrint('Error clearing cart: $e');
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+}
 }
