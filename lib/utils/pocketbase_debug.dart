@@ -30,7 +30,7 @@ class PocketBaseDebug {
       final response = await http.get(
         Uri.parse('$baseUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 5));
       
       debugPrint('Health check - Status: ${response.statusCode}');
       debugPrint('Health check - Body: ${response.body}');
@@ -52,7 +52,7 @@ class PocketBaseDebug {
       final response = await http.get(
         Uri.parse('$baseUrl/api/collections'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 5));
       
       debugPrint('Collections - Status: ${response.statusCode}');
       
@@ -78,7 +78,7 @@ class PocketBaseDebug {
       final response = await http.get(
         Uri.parse('$baseUrl/api/collections/$collectionName/records?page=1&perPage=1'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 5));
       
       debugPrint('$collectionName - Status: ${response.statusCode}');
       

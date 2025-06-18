@@ -4,7 +4,7 @@ class PaymentModel {
   final String userName;
   final int totalPrice;
   final int totalItems;
-  final String status; // 'pending', 'confirmed', 'cancelled'
+  final bool status; // Changed from String to bool - false: pending, true: confirmed
   final DateTime created;
   final DateTime updated;
   final List<PaymentItem> items;
@@ -28,7 +28,7 @@ class PaymentModel {
       userName: json['expand']?['users_id']?['name'] ?? '',
       totalPrice: json['total_price'] ?? 0,
       totalItems: json['total_items'] ?? 0,
-      status: json['status'] ?? 'pending',
+      status: json['status'] ?? false, // Default to false (pending)
       created: DateTime.parse(json['created']),
       updated: DateTime.parse(json['updated']),
       items: (json['items'] as List<dynamic>?)
@@ -42,10 +42,19 @@ class PaymentModel {
       'users_id': userId,
       'total_price': totalPrice,
       'total_items': totalItems,
-      'status': status,
+      'status': status, // Boolean value
       'items': items.map((item) => item.toJson()).toList(),
     };
   }
+
+  // Helper method to get status as string for display
+  String get statusText => status ? 'confirmed' : 'pending';
+  
+  // Helper method to check if payment is confirmed
+  bool get isConfirmed => status == true;
+  
+  // Helper method to check if payment is pending
+  bool get isPending => status == false;
 }
 
 class PaymentItem {

@@ -67,7 +67,7 @@ class PaymentService {
         'users_id': userId,
         'total_price': totalPrice,
         'total_items': totalItems,
-        'status': 'pending',
+        'status': false, // Boolean: false = pending, true = confirmed
         'items': paymentItems.map((item) => item.toJson()).toList(),
       };
 
@@ -92,7 +92,12 @@ class PaymentService {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        return PaymentModel.fromJson(responseData);
+        final payment = PaymentModel.fromJson(responseData);
+        
+        // Update cart items with payment_id after successful payment creation
+        await _updateCartItemsWithPaymentId(cartItems, payment.id);
+        
+        return payment;
       } else {
         debugPrint('Error creating payment: ${response.body}');
         _handleApiError(response);
@@ -101,6 +106,35 @@ class PaymentService {
     } catch (e) {
       debugPrint('Exception creating payment: $e');
       return null;
+    }
+  }
+  
+  // Update cart items with payment_id after payment creation
+  Future<void> _updateCartItemsWithPaymentId(List<CartModel> cartItems, String paymentId) async {
+    try {
+      debugPrint('Updating ${cartItems.length} cart items with payment_id: $paymentId');
+      
+      final headers = await _getAuthHeaders();
+      
+      for (final cartItem in cartItems) {
+        final updateData = {
+          'payment_id': paymentId,
+        };
+        
+        final response = await http.patch(
+          Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records/${cartItem.id}'),
+          headers: headers,
+          body: jsonEncode(updateData),
+        );
+        
+        if (response.statusCode == 200) {
+          debugPrint('✅ Updated cart item ${cartItem.id} with payment_id');
+        } else {
+          debugPrint('❌ Failed to update cart item ${cartItem.id}: ${response.body}');
+        }
+      }
+    } catch (e) {
+      debugPrint('Exception updating cart items with payment_id: $e');
     }
   }
   
@@ -240,8 +274,8 @@ class PaymentService {
     }
   }
 
-  // Update payment status
-  Future<bool> updatePaymentStatus(String paymentId, String status) async {
+  // Update payment status - now accepts boolean
+  Future<bool> updatePaymentStatus(String paymentId, bool status) async {
     try {
       debugPrint('Updating payment status: $paymentId to $status');
       
@@ -253,13 +287,18 @@ class PaymentService {
       final response = await http.patch(
         Uri.parse(apiUrl),
         headers: headers,
-        body: jsonEncode({'status': status}),
+        body: jsonEncode({'status': status}), // Boolean value
       );
 
       debugPrint('Response status: ${response.statusCode}');
       debugPrint('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
+        // If payment is confirmed (status = true), clear cart items
+        if (status == true) {
+          debugPrint('Payment confirmed, clearing cart items...');
+          await clearCartForPayment(paymentId);
+        }
         return true;
       } else {
         debugPrint('Error updating payment status: ${response.body}');
@@ -268,6 +307,54 @@ class PaymentService {
       }
     } catch (e) {
       debugPrint('Exception updating payment status: $e');
+      return false;
+    }
+  }
+
+  // Clear cart items for a specific payment when confirmed
+  Future<bool> clearCartForPayment(String paymentId) async {
+    try {
+      debugPrint('Clearing cart items for payment: $paymentId');
+      
+      final headers = await _getAuthHeaders();
+      
+      // First, get all cart items with this payment_id
+      final getResponse = await http.get(
+        Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(payment_id="$paymentId")'),
+        headers: headers,
+      );
+      
+      if (getResponse.statusCode == 200) {
+        final responseData = jsonDecode(getResponse.body);
+        final List<dynamic> cartItems = responseData['items'] ?? [];
+        
+        debugPrint('Found ${cartItems.length} cart items to delete for payment $paymentId');
+        
+        // Delete each cart item
+        int deletedCount = 0;
+        for (final item in cartItems) {
+          final itemId = item['id'];
+          final deleteResponse = await http.delete(
+            Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records/$itemId'),
+            headers: headers,
+          );
+          
+          if (deleteResponse.statusCode == 204) {
+            deletedCount++;
+            debugPrint('✅ Deleted cart item: $itemId');
+          } else {
+            debugPrint('❌ Failed to delete cart item $itemId: ${deleteResponse.body}');
+          }
+        }
+        
+        debugPrint('Successfully deleted $deletedCount out of ${cartItems.length} cart items');
+        return deletedCount == cartItems.length;
+      } else {
+        debugPrint('Error getting cart items for payment: ${getResponse.body}');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Exception clearing cart for payment: $e');
       return false;
     }
   }
@@ -401,6 +488,79 @@ class PaymentService {
     } catch (e) {
       debugPrint('Exception creating multi-user payments: $e');
       return [];
+    }
+  }
+
+  // Get cart items by payment ID (for debugging/verification)
+  Future<List<CartModel>> getCartItemsByPaymentId(String paymentId) async {
+    try {
+      debugPrint('Getting cart items for payment: $paymentId');
+      
+      final headers = await _getAuthHeaders();
+      final response = await http.get(
+        Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(payment_id="$paymentId")&expand=products_id'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final List<dynamic> items = responseData['items'] ?? [];
+        return items.map((item) => CartModel.fromJson(item)).toList();
+      } else {
+        debugPrint('Error getting cart items by payment ID: ${response.body}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Exception getting cart items by payment ID: $e');
+      return [];
+    }
+  }
+
+  // Clear all cart items for a specific user (alternative method)
+  Future<bool> clearCartForUser(String userId) async {
+    try {
+      debugPrint('Clearing all cart items for user: $userId');
+      
+      final headers = await _getAuthHeaders();
+      
+      // Get all cart items for the user
+      final getResponse = await http.get(
+        Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(users_id="$userId")'),
+        headers: headers,
+      );
+      
+      if (getResponse.statusCode == 200) {
+        final responseData = jsonDecode(getResponse.body);
+        final List<dynamic> cartItems = responseData['items'] ?? [];
+        
+        debugPrint('Found ${cartItems.length} cart items to delete for user $userId');
+        
+        // Delete each cart item
+        int deletedCount = 0;
+        for (final item in cartItems) {
+          final itemId = item['id'];
+          final deleteResponse = await http.delete(
+            Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records/$itemId'),
+            headers: headers,
+          );
+          
+          if (deleteResponse.statusCode == 204) {
+            deletedCount++;
+            debugPrint('✅ Deleted cart item: $itemId');
+          } else {
+            debugPrint('❌ Failed to delete cart item $itemId: ${deleteResponse.body}');
+          }
+        }
+        
+        debugPrint('Successfully deleted $deletedCount out of ${cartItems.length} cart items');
+        return deletedCount == cartItems.length;
+      } else {
+        debugPrint('Error getting cart items for user: ${getResponse.body}');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Exception clearing cart for user: $e');
+      return false;
     }
   }
 }

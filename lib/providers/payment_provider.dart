@@ -123,8 +123,8 @@ class PaymentProvider with ChangeNotifier {
     }
   }
   
-  // Update payment status
-  Future<bool> updatePaymentStatus(String paymentId, String status) async {
+  // Update payment status - now accepts boolean
+  Future<bool> updatePaymentStatus(String paymentId, bool status) async {
     try {
       debugPrint('PaymentProvider: Updating payment $paymentId status to $status');
       
@@ -140,7 +140,7 @@ class PaymentProvider with ChangeNotifier {
             userName: _payments[index].userName,
             totalPrice: _payments[index].totalPrice,
             totalItems: _payments[index].totalItems,
-            status: status,
+            status: status, // Boolean value
             items: _payments[index].items,
             created: _payments[index].created,
             updated: DateTime.now(),
@@ -148,6 +148,13 @@ class PaymentProvider with ChangeNotifier {
           _payments[index] = updatedPayment;
           notifyListeners();
         }
+        
+        // If payment is confirmed (status = true), clear cart items
+        if (status == true) {
+          debugPrint('Payment confirmed, clearing cart items...');
+          await _paymentService.clearCartForPayment(paymentId);
+        }
+        
         debugPrint('PaymentProvider: Payment status updated successfully');
       } else {
         _setError('Failed to update payment status');

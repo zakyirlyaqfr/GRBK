@@ -2,6 +2,7 @@ class CartModel {
   final String id;
   final String usersId;
   final String productsId;
+  final String? paymentId; // New field - relation to payment collection
   final int quantity;
   final String temperature;
   final String sweetness;
@@ -19,6 +20,7 @@ class CartModel {
     required this.id,
     required this.usersId,
     required this.productsId,
+    this.paymentId, // Optional payment ID
     required this.quantity,
     required this.temperature,
     required this.sweetness,
@@ -36,6 +38,7 @@ class CartModel {
       id: json['id'] ?? '',
       usersId: json['users_id'] ?? '',
       productsId: json['products_id'] ?? '',
+      paymentId: json['payment_id'], // Can be null
       quantity: json['quantity'] ?? 0,
       temperature: json['temperature'] ?? '',
       sweetness: json['sweetness'] ?? '',
@@ -54,6 +57,7 @@ class CartModel {
     return {
       'users_id': usersId,
       'products_id': productsId,
+      if (paymentId != null) 'payment_id': paymentId, // Include only if not null
       'quantity': quantity,
       'temperature': temperature,
       'sweetness': sweetness,
@@ -65,6 +69,7 @@ class CartModel {
     String? id,
     String? usersId,
     String? productsId,
+    String? paymentId,
     int? quantity,
     String? temperature,
     String? sweetness,
@@ -80,6 +85,7 @@ class CartModel {
       id: id ?? this.id,
       usersId: usersId ?? this.usersId,
       productsId: productsId ?? this.productsId,
+      paymentId: paymentId ?? this.paymentId,
       quantity: quantity ?? this.quantity,
       temperature: temperature ?? this.temperature,
       sweetness: sweetness ?? this.sweetness,
@@ -94,4 +100,7 @@ class CartModel {
   }
 
   int get totalPrice => (productPrice ?? 0) * quantity;
+  
+  // Helper method to check if cart item is linked to a payment
+  bool get hasPayment => paymentId != null && paymentId!.isNotEmpty;
 }

@@ -1222,7 +1222,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                         
                         // Update payment status to confirmed
                         final success = await context.read<PaymentProvider>()
-                            .updatePaymentStatus(_currentPayment!.id, 'confirmed');
+                            .updatePaymentStatus(_currentPayment!.id, true);
                         
                         if (success) {
                           // Clear cart items for this payment

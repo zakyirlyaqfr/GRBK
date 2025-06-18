@@ -399,7 +399,7 @@ class PocketBaseService {
     try {
       // This is just a dummy check for demonstration.
       // In a real app, you should use http.get(Uri.parse('$baseUrl/health')) or similar.
-      await Future.delayed(Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 1));
       debugPrint('PocketBase server check: $baseUrl');
       return true;
     } catch (e) {

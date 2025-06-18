@@ -86,7 +86,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       final paymentProvider = context.read<PaymentProvider>();
       final payment = await paymentProvider.getPaymentById(paymentId);
       
-      if (payment != null && payment.status == 'confirmed') {
+      if (payment != null && payment.isConfirmed) {
         timer.cancel();
         if (mounted) {
           debugPrint('Payment confirmed! Clearing cart from database...');
