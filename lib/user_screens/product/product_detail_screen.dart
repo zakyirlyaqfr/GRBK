@@ -6,6 +6,7 @@ import '../cart/cart_screen.dart';
 import '../../utils/app_theme.dart';
 import '../../models/product_model.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/cart_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
@@ -120,18 +121,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                     ),
                   ],
                 ),
-                child: IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const CartScreen()),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.shopping_cart_rounded,
-                    color: AppTheme.deepNavy,
-                  ),
+                child: Stack(
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const CartScreen()),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.shopping_cart_rounded,
+                        color: AppTheme.deepNavy,
+                      ),
+                    ),
+                    // Cart badge
+                    Consumer<CartProvider>(
+                      builder: (context, cartProvider, child) {
+                        if (cartProvider.totalItems > 0) {
+                          return Positioned(
+                            right: 6,
+                            top: 6,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                '${cartProvider.totalItems}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -179,8 +216,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
               child: Stack(
                 children: [
                   Container(
-                    width: double.infinity, // Mengisi lebar penuh
-                    height: 350, // Sesuaikan dengan expandedHeight SliverAppBar
+                    width: double.infinity,
+                    height: 350,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
                       boxShadow: [
@@ -197,7 +234,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                             context
                                 .read<ProductProvider>()
                                 .getImageUrl(widget.product),
-                            fit: BoxFit.cover, // Mengisi container secara penuh
+                            fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               return const Center(
                                 child: Icon(
@@ -274,17 +311,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProductHeader(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             _buildDescriptionSection(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16), // Reduced from 20
             _buildTemperatureSection(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             _buildSweetnessSection(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             _buildSpecialNotesSection(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16), // Reduced from 20
             _buildQuantitySection(),
-            const SizedBox(height: 100),
+            const SizedBox(height: 24), // Reduced from 80
           ],
         ),
       ),
@@ -362,7 +399,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'About This Coffee',
+          'Description',
           style: GoogleFonts.oswald(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -789,37 +826,52 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                         ]
                       : [],
                 ),
-                child: ElevatedButton(
-                  onPressed: _isAvailable ? _addToCart : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _isAvailable
-                            ? Icons.shopping_cart_rounded
-                            : Icons.block_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _isAvailable ? 'Add to Cart' : 'Not Available',
-                        style: GoogleFonts.oswald(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
+                child: Consumer<CartProvider>(
+                  builder: (context, cartProvider, child) {
+                    return ElevatedButton(
+                      onPressed: _isAvailable && !cartProvider.isLoading 
+                          ? _addToCart 
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                    ],
-                  ),
+                      child: cartProvider.isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _isAvailable
+                                      ? Icons.shopping_cart_rounded
+                                      : Icons.block_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  _isAvailable ? 'Add to Cart' : 'Not Available',
+                                  style: GoogleFonts.oswald(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -829,70 +881,146 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     );
   }
 
-  void _addToCart() {
+  void _addToCart() async {
     if (!_isAvailable) return;
 
-    // ignore: unused_local_variable
-    final orderDetails = {
-      'product': widget.product.name,
-      'quantity': _quantity,
-      'temperature': _selectedTemperature,
-      'sweetness': _selectedSweetness,
-      'specialNotes': _specialNotesController.text.trim(),
-      'totalPrice': _totalPrice,
-    };
+    final cartProvider = context.read<CartProvider>();
+  
+    try {
+      await cartProvider.addToCart(
+        productId: widget.product.id,
+        quantity: _quantity,
+        temperature: _selectedTemperature,
+        sweetness: _selectedSweetness,
+        specialNotes: _specialNotesController.text.trim(),
+      );
 
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: AppTheme.lightGradient,
+      if (mounted) {
+        if (cartProvider.error != null) {
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Error: ${cartProvider.error}',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Dismiss',
+                textColor: Colors.white,
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                },
+              ),
+            ),
+          );
+        } else {
+          // Show success notification
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Item added to cart',
+                          style: GoogleFonts.oswald(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          '${widget.product.name} (${_quantity}x)',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 2),
+              action: SnackBarAction(
+                label: 'View Cart',
+                textColor: Colors.white,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CartScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Failed to add item to cart',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Added to Cart!',
-                style: GoogleFonts.oswald(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepNavy,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${widget.product.name} has been added to your cart',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  color: AppTheme.charcoalGray,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
+        );
+      }
+    }
   }
 }

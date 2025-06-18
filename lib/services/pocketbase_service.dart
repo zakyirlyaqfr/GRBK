@@ -60,7 +60,7 @@ class PocketBaseService {
           'email': 'admin@gmail.com',
           'password': 'admin123',
           'passwordConfirm': 'admin123',
-          'admin': true, // Changed from 'role': 'admin'
+          'admin': true,
         }),
       );
 
@@ -166,7 +166,7 @@ class PocketBaseService {
           'email': email,
           'password': password,
           'passwordConfirm': password,
-          'admin': false, // Changed from 'role': 'user'
+          'admin': false,
         }),
       );
 
@@ -229,7 +229,7 @@ class PocketBaseService {
         final totalItems = data['totalItems'] ?? 0;
         return {
           'total': totalItems,
-          'active': totalItems, // Assuming all users are active
+          'active': totalItems,
         };
       }
       return {'total': 0, 'active': 0};
@@ -285,54 +285,54 @@ class PocketBaseService {
 
   // Update admin profile
   Future<Map<String, dynamic>> updateAdminProfile(String name, String email) async {
-  if (_currentUser == null || _authToken == null || !_currentUser!.admin) {
-    return {'success': false, 'message': 'Not authenticated as admin'};
-  }
+    if (_currentUser == null || _authToken == null || !_currentUser!.admin) {
+      return {'success': false, 'message': 'Not authenticated as admin'};
+    }
 
-  try {
-    print('Updating admin profile: name=$name, email=$email'); // Debug log
-    
-    final response = await http.patch(
-      Uri.parse('$apiUrl/collections/users/records/${_currentUser!.id}'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_authToken',
-      },
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-      }),
-    );
-
-    print('Update response status: ${response.statusCode}'); // Debug log
-    print('Update response body: ${response.body}'); // Debug log
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      _currentUser = UserModel.fromJson(data);
-      await _saveAuthData();
+    try {
+      print('Updating admin profile: name=$name, email=$email');
       
-      return {
-        'success': true,
-        'user': _currentUser,
-        'message': 'Admin profile updated successfully'
-      };
-    } else {
-      final error = jsonDecode(response.body);
-      print('Update error: $error'); // Debug log
+      final response = await http.patch(
+        Uri.parse('$apiUrl/collections/users/records/${_currentUser!.id}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_authToken',
+        },
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+        }),
+      );
+
+      print('Update response status: ${response.statusCode}');
+      print('Update response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _currentUser = UserModel.fromJson(data);
+        await _saveAuthData();
+        
+        return {
+          'success': true,
+          'user': _currentUser,
+          'message': 'Admin profile updated successfully'
+        };
+      } else {
+        final error = jsonDecode(response.body);
+        print('Update error: $error');
+        return {
+          'success': false,
+          'message': error['message'] ?? 'Update failed'
+        };
+      }
+    } catch (e) {
+      print('Update exception: $e');
       return {
         'success': false,
-        'message': error['message'] ?? 'Update failed'
+        'message': 'Network error: $e'
       };
     }
-  } catch (e) {
-    print('Update exception: $e'); // Debug log
-    return {
-      'success': false,
-      'message': 'Network error: $e'
-    };
   }
-}
 
   // Change password
   Future<Map<String, dynamic>> changePassword(String currentPassword, String newPassword) async {

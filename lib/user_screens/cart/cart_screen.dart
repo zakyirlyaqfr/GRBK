@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:math';
 import 'dart:async';
 import '../../utils/app_theme.dart';
 import '../../user_screens/home/home_screen.dart';
+import '../../providers/cart_provider.dart';
+import '../../providers/product_provider.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -17,63 +20,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-
-  final List<Map<String, dynamic>> _cartItems = [
-    {
-      'name': 'GRBK Special Blend',
-      'price': 35000,
-      'image': '☕',
-      'quantity': 2,
-      'temperature': 'Hot',
-      'sweetness': 'Normal',
-      'specialNotes': 'Extra hot please',
-    },
-    {
-      'name': 'Single Origin Americano',
-      'price': 25000,
-      'image': '☕',
-      'quantity': 1,
-      'temperature': 'Iced',
-      'sweetness': 'Less Sweet',
-      'specialNotes': '',
-    },
-    {
-      'name': 'Artisan Croissant',
-      'price': 18000,
-      'image': '🥐',
-      'quantity': 1,
-      'temperature': '-',
-      'sweetness': '-',
-      'specialNotes': 'Warm it up',
-    },
-  ];
-
-  int get _totalPrice {
-    return _cartItems.fold(0, (sum, item) => sum + (item['price'] as int) * (item['quantity'] as int));
-  }
-
-  int get _totalItems {
-    return _cartItems.fold(0, (sum, item) => sum + (item['quantity'] as int));
-  }
-
-  // Generate random QR code data
-  String _generateRandomQRData() {
-    final random = Random();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final randomNumber = random.nextInt(999999);
-    final orderCode = 'GRBK${timestamp.toString().substring(8)}${randomNumber.toString().padLeft(6, '0')}';
-    
-    return '''
-{
-  "store": "GRBK Coffee Shop",
-  "order_id": "$orderCode",
-  "total": $_totalPrice,
-  "items": $_totalItems,
-  "timestamp": "$timestamp",
-  "payment_method": "cashier",
-  "status": "pending"
-}''';
-  }
 
   @override
   void initState() {
@@ -100,12 +46,38 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
     ));
     
     _animationController.forward();
+
+    // Load cart items when screen initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CartProvider>().loadCartItems();
+    });
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  // Generate random QR code data
+  String _generateRandomQRData() {
+    final random = Random();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final randomNumber = random.nextInt(999999);
+    final orderCode = 'GRBK${timestamp.toString().substring(8)}${randomNumber.toString().padLeft(6, '0')}';
+    
+    final cartProvider = context.read<CartProvider>();
+    
+    return '''
+{
+  "store": "GRBK Coffee Shop",
+  "order_id": "$orderCode",
+  "total": ${cartProvider.totalPrice},
+  "items": ${cartProvider.totalItems},
+  "timestamp": "$timestamp",
+  "payment_method": "cashier",
+  "status": "pending"
+}''';
   }
 
   @override
@@ -120,12 +92,68 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
             
             // Content
             Expanded(
-              child: _cartItems.isEmpty ? _buildEmptyCart() : _buildCartContent(),
+              child: Consumer<CartProvider>(
+                builder: (context, cartProvider, child) {
+                  if (cartProvider.isLoading) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
+
+                  if (cartProvider.error != null) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: Colors.red.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Error loading cart',
+                            style: GoogleFonts.oswald(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            cartProvider.error!,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              color: AppTheme.charcoalGray,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: () => cartProvider.loadCartItems(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return cartProvider.cartItems.isEmpty 
+                      ? _buildEmptyCart() 
+                      : _buildCartContent();
+                },
+              ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _cartItems.isNotEmpty ? _buildEnhancedBottomBar() : null,
+      bottomNavigationBar: Consumer<CartProvider>(
+        builder: (context, cartProvider, child) {
+          return cartProvider.cartItems.isNotEmpty && !cartProvider.isLoading
+              ? _buildEnhancedBottomBar()
+              : const SizedBox.shrink();
+        },
+      ),
     );
   }
 
@@ -170,32 +198,44 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         letterSpacing: 1,
                       ),
                     ),
-                    if (_cartItems.isNotEmpty)
-                      Text(
-                        '$_totalItems items • Rp $_totalPrice',
-                        style: GoogleFonts.poppins(
-                          color: AppTheme.warmBeige,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
+                    Consumer<CartProvider>(
+                      builder: (context, cartProvider, child) {
+                        if (cartProvider.cartItems.isNotEmpty) {
+                          return Text(
+                            '${cartProvider.totalItems} items • Rp ${cartProvider.totalPrice}',
+                            style: GoogleFonts.poppins(
+                              color: AppTheme.warmBeige,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
                   ],
                 ),
               ),
-              if (_cartItems.isNotEmpty)
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    onPressed: _showClearCartDialog,
-                    icon: const Icon(
-                      Icons.delete_sweep_rounded,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+              Consumer<CartProvider>(
+                builder: (context, cartProvider, child) {
+                  if (cartProvider.cartItems.isNotEmpty) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        onPressed: _showClearCartDialog,
+                        icon: const Icon(
+                          Icons.delete_sweep_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
             ],
           ),
         ],
@@ -368,18 +408,22 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   Widget _buildCartContent() {
     return FadeTransition(
       opacity: _fadeAnimation,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(24),
-        itemCount: _cartItems.length,
-        itemBuilder: (context, index) {
-          final item = _cartItems[index];
-          return _buildEnhancedCartItem(item, index);
+      child: Consumer<CartProvider>(
+        builder: (context, cartProvider, child) {
+          return ListView.builder(
+            padding: const EdgeInsets.all(24),
+            itemCount: cartProvider.cartItems.length,
+            itemBuilder: (context, index) {
+              final item = cartProvider.cartItems[index];
+              return _buildEnhancedCartItem(item, index);
+            },
+          );
         },
       ),
     );
   }
 
-  Widget _buildEnhancedCartItem(Map<String, dynamic> item, int index) {
+  Widget _buildEnhancedCartItem(item, int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
@@ -419,12 +463,32 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: Text(
-                        item['image'],
-                        style: const TextStyle(fontSize: 36),
-                      ),
-                    ),
+                    child: item.productImage != null && item.productImage!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.network(
+                              context.read<ProductProvider>().getImageUrlFromPath(item.productImage!),
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Icon(
+                                    Icons.coffee_rounded,
+                                    size: 36,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.coffee_rounded,
+                              size: 36,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                   
                   const SizedBox(width: 16),
@@ -435,7 +499,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          item['name'],
+                          item.productName ?? 'Unknown Product',
                           style: GoogleFonts.oswald(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -445,20 +509,20 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         const SizedBox(height: 8),
                         
                         // Temperature & Sweetness
-                        if (item['temperature'] != '-')
+                        if (item.temperature.isNotEmpty && item.temperature != '-')
                           Wrap(
                             spacing: 8,
                             children: [
-                              _buildInfoChip(item['temperature'], Icons.thermostat_rounded),
-                              if (item['sweetness'] != '-')
-                                _buildInfoChip(item['sweetness'], Icons.favorite_rounded),
+                              _buildInfoChip(item.temperature, Icons.thermostat_rounded),
+                              if (item.sweetness.isNotEmpty && item.sweetness != '-')
+                                _buildInfoChip(item.sweetness, Icons.favorite_rounded),
                             ],
                           ),
                         
                         const SizedBox(height: 8),
                         
                         // Special Notes
-                        if (item['specialNotes'].isNotEmpty)
+                        if (item.specialNotes.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
@@ -475,7 +539,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    item['specialNotes'],
+                                    item.specialNotes,
                                     style: GoogleFonts.poppins(
                                       fontSize: 12,
                                       color: AppTheme.charcoalGray,
@@ -491,7 +555,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         
                         // Price
                         Text(
-                          'Rp ${item['price']}',
+                          'Rp ${item.productPrice ?? 0}',
                           style: GoogleFonts.oswald(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -523,11 +587,10 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         _buildQuantityButton(
                           Icons.remove_rounded,
                           () {
-                            if (item['quantity'] > 1) {
-                              setState(() {
-                                item['quantity']--;
-                              });
-                            }
+                            context.read<CartProvider>().updateCartItemQuantity(
+                              item.id, 
+                              item.quantity - 1
+                            );
                           },
                         ),
                         Container(
@@ -538,7 +601,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '${item['quantity']}',
+                            '${item.quantity}',
                             style: GoogleFonts.oswald(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -549,9 +612,10 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         _buildQuantityButton(
                           Icons.add_rounded,
                           () {
-                            setState(() {
-                              item['quantity']++;
-                            });
+                            context.read<CartProvider>().updateCartItemQuantity(
+                              item.id, 
+                              item.quantity + 1
+                            );
                           },
                         ),
                       ],
@@ -572,7 +636,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                           ),
                           Text(
-                            'Rp ${item['price'] * item['quantity']}',
+                            'Rp ${item.totalPrice}',
                             style: GoogleFonts.oswald(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -583,7 +647,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(width: 16),
                       GestureDetector(
-                        onTap: () => _removeItem(index),
+                        onTap: () => _removeItem(item.id),
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -674,132 +738,145 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
         ],
       ),
       child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Order Summary
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: AppTheme.lightGradient,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Items ($_totalItems)',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: AppTheme.charcoalGray,
-                        ),
-                      ),
-                      Text(
-                        'Rp $_totalPrice',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.deepNavy,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 1,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          AppTheme.warmBeige.withValues(alpha: 0.5),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total',
-                        style: GoogleFonts.oswald(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.deepNavy,
-                        ),
-                      ),
-                      Text(
-                        'Rp $_totalPrice',
-                        style: GoogleFonts.oswald(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.deepNavy,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // Pay Button
-            Container(
-              width: double.infinity,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.deepNavy.withValues(alpha: 0.4),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: ElevatedButton(
-                onPressed: _showPayAtCashierDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
+        child: Consumer<CartProvider>(
+          builder: (context, cartProvider, child) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Order Summary
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.lightGradient,
                     borderRadius: BorderRadius.circular(20),
                   ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Items (${cartProvider.totalItems})',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: AppTheme.charcoalGray,
+                            ),
+                          ),
+                          Text(
+                            'Rp ${cartProvider.totalPrice}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        height: 1,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              AppTheme.warmBeige.withValues(alpha: 0.5),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total',
+                            style: GoogleFonts.oswald(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                          Text(
+                            'Rp ${cartProvider.totalPrice}',
+                            style: GoogleFonts.oswald(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.store_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Pay at Cashier',
-                      style: GoogleFonts.oswald(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
+                
+                const SizedBox(height: 20),
+                
+                // Pay Button
+                Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.deepNavy.withValues(alpha: 0.4),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: cartProvider.isLoading ? null : _showPayAtCashierDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                  ],
+                    child: cartProvider.isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.store_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Pay at Cashier',
+                                style: GoogleFonts.oswald(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  void _removeItem(int index) {
+  void _removeItem(String cartId) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -880,9 +957,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       child: TextButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          setState(() {
-                            _cartItems.removeAt(index);
-                          });
+                          context.read<CartProvider>().removeFromCart(cartId);
                           _showSuccessSnackBar('Item removed from cart');
                         },
                         child: Text(
@@ -985,9 +1060,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       child: TextButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          setState(() {
-                            _cartItems.clear();
-                          });
+                          context.read<CartProvider>().clearCart();
                           _showSuccessSnackBar('Cart cleared successfully');
                         },
                         child: Text(
@@ -1054,370 +1127,379 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header with QR Icon
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      gradient: isPaymentConfirmed 
-                          ? const LinearGradient(
-                              colors: [Colors.green, Colors.lightGreen],
-                            )
-                          : AppTheme.primaryGradient,
-                      borderRadius: BorderRadius.circular(40),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isPaymentConfirmed ? Colors.green : AppTheme.deepNavy)
-                              .withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      isPaymentConfirmed ? Icons.check_circle_rounded : Icons.qr_code_rounded,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Title
-                  ShaderMask(
-                    shaderCallback: (bounds) => (isPaymentConfirmed 
-                        ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                        : AppTheme.primaryGradient).createShader(bounds),
-                    child: Text(
-                      isPaymentConfirmed ? 'Payment Confirmed!' : 'Payment QR Code',
-                      style: GoogleFonts.oswald(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 8),
-                  
-                  // Order Number
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Order #$orderNumber',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.deepNavy,
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // QR Code or Success Message
-                  if (!isPaymentConfirmed) ...[
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.deepNavy.withValues(alpha: 0.1),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: QrImageView(
-                        data: qrData,
-                        version: QrVersions.auto,
-                        size: 200.0,
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppTheme.deepNavy,
-                        gapless: false,
-                        errorStateBuilder: (cxt, err) {
-                          return Container(
-                            width: 200,
-                            height: 200,
-                            decoration: BoxDecoration(
-                              color: AppTheme.softWhite,
-                              borderRadius: BorderRadius.circular(16),
+              child: Consumer<CartProvider>(
+                builder: (context, cartProvider, child) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header with QR Icon
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          gradient: isPaymentConfirmed 
+                              ? const LinearGradient(
+                                  colors: [Colors.green, Colors.lightGreen],
+                                )
+                              : AppTheme.primaryGradient,
+                          borderRadius: BorderRadius.circular(40),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isPaymentConfirmed ? Colors.green : AppTheme.deepNavy)
+                                  .withValues(alpha: 0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
                             ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline_rounded,
-                                  size: 48,
+                          ],
+                        ),
+                        child: Icon(
+                          isPaymentConfirmed ? Icons.check_circle_rounded : Icons.qr_code_rounded,
+                          color: Colors.white,
+                          size: 40,
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Title
+                      ShaderMask(
+                        shaderCallback: (bounds) => (isPaymentConfirmed 
+                            ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                            : AppTheme.primaryGradient).createShader(bounds),
+                        child: Text(
+                          isPaymentConfirmed ? 'Payment Confirmed!' : 'Payment QR Code',
+                          style: GoogleFonts.oswald(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Order Number
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Order #$orderNumber',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.deepNavy,
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // QR Code or Success Message
+                      if (!isPaymentConfirmed) ...[
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                                blurRadius: 15,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: QrImageView(
+                            data: qrData,
+                            version: QrVersions.auto,
+                            size: 200.0,
+                            backgroundColor: Colors.white,
+                            eyeStyle: const QrEyeStyle(
+                              eyeShape: QrEyeShape.square,
+                              color: AppTheme.deepNavy,
+                            ),
+                            dataModuleStyle: const QrDataModuleStyle(
+                              dataModuleShape: QrDataModuleShape.square,
+                              color: AppTheme.deepNavy,
+                            ),
+                            gapless: false,
+                            errorStateBuilder: (cxt, err) {
+                              return Container(
+                                width: 200,
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.softWhite,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline_rounded,
+                                      size: 48,
+                                      color: AppTheme.charcoalGray,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'QR Code Error',
+                                      style: GoogleFonts.poppins(
+                                        color: AppTheme.charcoalGray,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        // Success Animation
+                        Container(
+                          width: 200,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.3),
+                              width: 2,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(40),
+                                ),
+                                child: const Icon(
+                                  Icons.check_rounded,
+                                  color: Colors.white,
+                                  size: 50,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Payment Successful!',
+                                style: GoogleFonts.oswald(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Your order is being prepared',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
                                   color: AppTheme.charcoalGray,
                                 ),
-                                const SizedBox(height: 8),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Instructions or Status
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    gradient: isPaymentConfirmed 
+                                        ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                                        : AppTheme.accentGradient,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    isPaymentConfirmed 
+                                        ? Icons.check_circle_outline_rounded
+                                        : Icons.info_outline_rounded,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Text(
-                                  'QR Code Error',
-                                  style: GoogleFonts.poppins(
-                                    color: AppTheme.charcoalGray,
-                                    fontSize: 14,
+                                  isPaymentConfirmed ? 'Payment Status' : 'Payment Instructions',
+                                  style: GoogleFonts.oswald(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.deepNavy,
                                   ),
                                 ),
                               ],
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ] else ...[
-                    // Success Animation
-                    Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.green.withValues(alpha: 0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              borderRadius: BorderRadius.circular(40),
-                            ),
-                            child: const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 50,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Payment Successful!',
-                            style: GoogleFonts.oswald(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Your order is being prepared',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: AppTheme.charcoalGray,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Instructions or Status
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                gradient: isPaymentConfirmed 
-                                    ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                                    : AppTheme.accentGradient,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                isPaymentConfirmed 
-                                    ? Icons.check_circle_outline_rounded
-                                    : Icons.info_outline_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
+                            const SizedBox(height: 12),
                             Text(
-                              isPaymentConfirmed ? 'Payment Status' : 'Payment Instructions',
-                              style: GoogleFonts.oswald(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.deepNavy,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          isPaymentConfirmed 
-                              ? 'Payment has been confirmed by cashier.\nYou can now continue to view your order history.'
-                              : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation',
-                          style: GoogleFonts.poppins(
-                            color: AppTheme.charcoalGray,
-                            fontSize: 13,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Order Summary
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.deepNavy.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Total Items',
+                              isPaymentConfirmed 
+                                  ? 'Payment has been confirmed by cashier.\nYou can now continue to view your order history.'
+                                  : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation',
                               style: GoogleFonts.poppins(
-                                fontSize: 12,
                                 color: AppTheme.charcoalGray,
-                              ),
-                            ),
-                            Text(
-                              '$_totalItems items',
-                              style: GoogleFonts.oswald(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.deepNavy,
+                                fontSize: 13,
+                                height: 1.5,
                               ),
                             ),
                           ],
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Order Summary
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.deepNavy.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Total Amount',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: AppTheme.charcoalGray,
-                              ),
-                            ),
-                            Text(
-                              'Rp $_totalPrice',
-                              style: GoogleFonts.oswald(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.deepNavy,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Continue Button - FIXED: Navigate to standalone HistoryScreen
-                  Container(
-                    width: double.infinity,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      gradient: isPaymentConfirmed 
-                          ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                          : LinearGradient(
-                              colors: [
-                                AppTheme.charcoalGray.withValues(alpha: 0.5),
-                                AppTheme.charcoalGray.withValues(alpha: 0.3),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Total Items',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppTheme.charcoalGray,
+                                  ),
+                                ),
+                                Text(
+                                  '${cartProvider.totalItems} items',
+                                  style: GoogleFonts.oswald(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.deepNavy,
+                                  ),
+                                ),
                               ],
                             ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: isPaymentConfirmed ? [
-                        BoxShadow(
-                          color: Colors.green.withValues(alpha: 0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 8),
-                        ),
-                      ] : [],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: isPaymentConfirmed ? () {
-                        confirmationTimer?.cancel();
-                        Navigator.of(context).pop(); // Close the dialog
-                        setState(() {
-                          _cartItems.clear(); // Clear the cart
-                        });
-                        
-                        // Navigate to standalone HistoryScreen without bottom navigation
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (context) => const HomeScreen(),
-                          ),
-                          (route) => route.isFirst, // Keep only the first route (home)
-                        );
-                      } : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Total Amount',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppTheme.charcoalGray,
+                                  ),
+                                ),
+                                Text(
+                                  'Rp ${cartProvider.totalPrice}',
+                                  style: GoogleFonts.oswald(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.deepNavy,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            isPaymentConfirmed 
-                                ? Icons.receipt_long_rounded 
-                                : Icons.hourglass_empty_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            isPaymentConfirmed 
-                                ? 'Continue' 
-                                : 'Waiting for Confirmation...',
-                            style: GoogleFonts.oswald(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Continue Button
+                      Container(
+                        width: double.infinity,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: isPaymentConfirmed 
+                              ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                              : LinearGradient(
+                                  colors: [
+                                    AppTheme.charcoalGray.withValues(alpha: 0.5),
+                                    AppTheme.charcoalGray.withValues(alpha: 0.3),
+                                  ],
+                                ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: isPaymentConfirmed ? [
+                            BoxShadow(
+                              color: Colors.green.withValues(alpha: 0.3),
+                              blurRadius: 15,
+                              offset: const Offset(0, 8),
+                            ),
+                          ] : [],
+                        ),
+                        child: ElevatedButton(
+                          onPressed: isPaymentConfirmed ? () {
+                            confirmationTimer?.cancel();
+                            Navigator.of(context).pop(); // Close the dialog
+                            cartProvider.clearCart(); // Clear the cart
+                            
+                            // Navigate to home screen
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (context) => const HomeScreen(),
+                              ),
+                              (route) => route.isFirst, // Keep only the first route (home)
+                            );
+                          } : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                isPaymentConfirmed 
+                                    ? Icons.receipt_long_rounded 
+                                    : Icons.hourglass_empty_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                isPaymentConfirmed 
+                                    ? 'Continue' 
+                                    : 'Waiting for Confirmation...',
+                                style: GoogleFonts.oswald(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           );

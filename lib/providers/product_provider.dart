@@ -171,6 +171,26 @@ class ProductProvider extends ChangeNotifier {
     return _productService.getImageUrl(product);
   }
 
+  // Get image URL from path - NEW METHOD for cart functionality
+  String getImageUrlFromPath(String imagePath) {
+    // Assuming your PocketBase URL is similar to the one in CartService
+    const String baseUrl = 'http://127.0.0.1:8090'; // Replace with your PocketBase URL
+    
+    // Check if the path already contains the full URL
+    if (imagePath.startsWith('http')) {
+      return imagePath;
+    }
+    
+    // Check if path is empty or null
+    if (imagePath.isEmpty) {
+      return '';
+    }
+    
+    // Construct the URL for the image
+    // Format: http://your-pocketbase-url/api/files/collection_name/record_id/filename
+    return '$baseUrl/api/files/products/$imagePath';
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
