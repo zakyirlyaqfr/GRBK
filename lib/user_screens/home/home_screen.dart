@@ -8,6 +8,7 @@ import '../orders/history_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../utils/app_theme.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/cart_provider.dart'; // Tambahkan import ini
 import '../../models/product_model.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,24 +27,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Map<String, String>> _bannerImages = [
     {
-      'image': 'assets/images/banner1.jpg',
-      'title': 'Special Promo Today!',
-      'subtitle': 'Get 20% off for all coffee drinks'
+      'image': 'images/banner1.jpg',
     },
     {
-      'image': 'assets/images/banner2.jpg',
-      'title': 'New Menu Alert!',
-      'subtitle': 'Try our signature blend coffee'
+      'image': 'images/banner2.jpg',
     },
     {
-      'image': 'assets/images/banner3.jpg',
-      'title': 'Happy Hour',
-      'subtitle': 'Buy 2 get 1 free every 3-5 PM'
+      'image': 'images/banner3.jpg',
     },
     {
-      'image': 'assets/images/banner4.jpg',
-      'title': 'Weekend Special',
-      'subtitle': 'Fresh pastries available now'
+      'image': 'images/banner4.jpg',
     },
   ];
 
@@ -53,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
     'Basic Espresso',
     'Sparkling Fruity',
     'Milk Base',
-    'Tea Series',
     'Food'
   ];
 
@@ -86,17 +78,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
     List<ProductModel> filtered = products;
-    
+
     if (_selectedCategory != 'All') {
       filtered = filtered.where((product) => product.category == _selectedCategory).toList();
     }
-    
+
     if (_searchController.text.isNotEmpty) {
-      filtered = filtered.where((product) => 
-        product.name.toLowerCase().contains(_searchController.text.toLowerCase())
+      filtered = filtered.where((product) =>
+          product.name.toLowerCase().contains(_searchController.text.toLowerCase())
       ).toList();
     }
-    
+
+    // Urutkan produk secara alfabetis (A-Z)
+    filtered.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
     return filtered;
   }
 
@@ -164,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(25),
                         child: Image.asset(
-                          'assets/images/grbk_logo.png',
+                          'images/grbk_splash.png',
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             return const Icon(
@@ -274,35 +269,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               Colors.black.withValues(alpha: 0.7),
                             ],
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 20,
-                        left: 20,
-                        right: 20,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              banner['title']!,
-                              style: GoogleFonts.oswald(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              banner['subtitle']!,
-                              style: GoogleFonts.poppins(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 14,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 2,
-                            ),
-                          ],
                         ),
                       ),
                     ],
@@ -832,33 +798,72 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFloatingActionButton() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: AppTheme.primaryGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.deepNavy.withValues(alpha: 0.4),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CartScreen()),
-          );
-        },
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: const Icon(
-          Icons.shopping_cart_rounded, 
-          color: Colors.white, 
-          size: 28,
-        ),
-      ),
+    // Gunakan Consumer untuk mendapatkan jumlah item di cart
+    return Consumer<CartProvider>(
+      builder: (context, cartProvider, child) {
+        int cartCount = cartProvider.totalItems;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: AppTheme.primaryGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.deepNavy.withValues(alpha: 0.4),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CartScreen()),
+                  );
+                },
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                child: const Icon(
+                  Icons.shopping_cart_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+            ),
+            // Badge jika cart tidak kosong
+            if (cartCount > 0)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 22,
+                    minHeight: 22,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$cartCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

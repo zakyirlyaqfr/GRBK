@@ -242,6 +242,36 @@ class CartService {
     }
   }
 
+  // Clear all cart items for a specific user
+  static Future<void> clearCartForUser(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/collections/$collection/records?filter=users_id="$userId"'),
+        headers: _getAuthHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['items'] ?? [];
+        for (final item in items) {
+          final itemId = item['id'];
+          final deleteResponse = await http.delete(
+            Uri.parse('$baseUrl/api/collections/$collection/records/$itemId'),
+            headers: _getAuthHeaders(),
+          );
+          if (deleteResponse.statusCode != 204) {
+            debugPrint('Failed to delete cart item $itemId: ${deleteResponse.body}');
+          }
+        }
+      } else {
+        debugPrint('Failed to fetch cart items for user $userId: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error clearing cart for user $userId: $e');
+      throw Exception('Error clearing cart for user: $e');
+    }
+  }
+
   // Get cart item count for a specific product for the authenticated user
   static Future<int> getProductQuantityInCart(String productId) async {
     try {

@@ -1,11 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pocketbase/pocketbase.dart';
 import '../models/user_model.dart';
 
 class PocketBaseService {
-  // Update this URL to match your PocketBase server
   static const String baseUrl = 'http://127.0.0.1:8090';
   static const String apiUrl = '$baseUrl/api';
   
@@ -31,7 +33,6 @@ class PocketBaseService {
   // Ensure admin user exists
   Future<void> _ensureAdminExists() async {
     try {
-      // Check if admin already exists
       final response = await http.get(
         Uri.parse('$apiUrl/collections/users/records?filter=(email="admin@gmail.com")'),
         headers: {'Content-Type': 'application/json'},
@@ -41,7 +42,6 @@ class PocketBaseService {
         final data = jsonDecode(response.body);
         final List<dynamic> items = data['items'] ?? [];
         
-        // If admin doesn't exist, create it
         if (items.isEmpty) {
           await _createAdminUser();
         }
@@ -131,7 +131,6 @@ class PocketBaseService {
         final data = jsonDecode(response.body);
         _authToken = data['token'];
         
-        // Parse user data with proper role handling
         final userData = data['record'];
         _currentUser = UserModel.fromJson(userData);
         
@@ -192,6 +191,101 @@ class PocketBaseService {
     }
   }
 
+  // Update user profile with avatar support
+  Future<Map<String, dynamic>> updateProfile({
+    String? name,
+    String? email,
+    File? avatarFile,
+    String? webAvatarData,
+  }) async {
+    if (_currentUser == null || _authToken == null) {
+      return {'success': false, 'message': 'Not authenticated'};
+    }
+
+    try {
+      var request = http.MultipartRequest(
+        'PATCH',
+        Uri.parse('$apiUrl/collections/users/records/${_currentUser!.id}'),
+      );
+
+      // Add authorization header
+      request.headers['Authorization'] = 'Bearer $_authToken';
+
+      // Add text fields if provided
+      if (name != null) request.fields['name'] = name;
+      if (email != null) request.fields['email'] = email;
+
+      // Handle avatar upload
+      if (avatarFile != null && !kIsWeb) {
+        // Mobile/Desktop platform
+        var multipartFile = await http.MultipartFile.fromPath(
+          'avatar',
+          avatarFile.path,
+          contentType: MediaType('image', 'jpeg'),
+        );
+        request.files.add(multipartFile);
+        debugPrint('Mobile avatar file added: ${avatarFile.path}');
+      } else if (webAvatarData != null && webAvatarData.isNotEmpty && kIsWeb) {
+        // Web platform
+        try {
+          final RegExp regex = RegExp(r'data:image/([^;]+);base64,');
+          final match = regex.firstMatch(webAvatarData);
+          
+          if (match != null) {
+            final String imageType = match.group(1) ?? 'png';
+            final String base64Str = webAvatarData.replaceAll(regex, '');
+            final bytes = base64Decode(base64Str);
+            
+            final multipartFile = http.MultipartFile.fromBytes(
+              'avatar',
+              bytes,
+              filename: 'avatar_${DateTime.now().millisecondsSinceEpoch}.$imageType',
+              contentType: MediaType('image', imageType),
+            );
+            request.files.add(multipartFile);
+            debugPrint('Web avatar added successfully - Size: ${bytes.length} bytes');
+          }
+        } catch (e) {
+          debugPrint('Error processing web avatar: $e');
+        }
+      }
+
+      debugPrint('Updating profile for user: ${_currentUser!.id}');
+      debugPrint('Request fields: ${request.fields}');
+      debugPrint('Request files: ${request.files.length}');
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      debugPrint('Update profile response: ${response.statusCode}');
+      debugPrint('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _currentUser = UserModel.fromJson(data);
+        await _saveAuthData();
+        
+        return {
+          'success': true,
+          'user': _currentUser,
+          'message': 'Profile updated successfully'
+        };
+      } else {
+        final error = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': error['message'] ?? 'Update failed'
+        };
+      }
+    } catch (e) {
+      debugPrint('Update profile error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e'
+      };
+    }
+  }
+
   // Get all users (excluding admin for user list)
   Future<List<UserModel>> getUsers() async {
     try {
@@ -238,50 +332,6 @@ class PocketBaseService {
     } catch (e) {
       print('Error fetching user stats: $e');
       return {'total': 0, 'active': 0};
-    }
-  }
-
-  // Update user profile
-  Future<Map<String, dynamic>> updateProfile(String name, String email) async {
-    if (_currentUser == null || _authToken == null) {
-      return {'success': false, 'message': 'Not authenticated'};
-    }
-
-    try {
-      final response = await http.patch(
-        Uri.parse('$apiUrl/collections/users/records/${_currentUser!.id}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_authToken',
-        },
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _currentUser = UserModel.fromJson(data);
-        await _saveAuthData();
-        
-        return {
-          'success': true,
-          'user': _currentUser,
-          'message': 'Profile updated successfully'
-        };
-      } else {
-        final error = jsonDecode(response.body);
-        return {
-          'success': false,
-          'message': error['message'] ?? 'Update failed'
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Network error: $e'
-      };
     }
   }
 
@@ -397,8 +447,6 @@ class PocketBaseService {
   // Test if PocketBase is running
   static Future<bool> isServerRunning() async {
     try {
-      // This is just a dummy check for demonstration.
-      // In a real app, you should use http.get(Uri.parse('$baseUrl/health')) or similar.
       await Future.delayed(const Duration(seconds: 1));
       debugPrint('PocketBase server check: $baseUrl');
       return true;
@@ -407,6 +455,9 @@ class PocketBaseService {
       return false;
     }
   }
+
+  // Add this field to expose the PocketBase SDK client
+  final PocketBase pb = PocketBase(baseUrl);
 }
 
 extension PocketBaseTestUser on PocketBaseService {
@@ -415,7 +466,6 @@ extension PocketBaseTestUser on PocketBaseService {
     const testPassword = 'test1234';
     const testName = 'Test User';
 
-    // 1. Try to find the test user
     final findResponse = await http.get(
       Uri.parse('${PocketBaseService.apiUrl}/collections/users/records?filter=(email="$testEmail")'),
       headers: {'Content-Type': 'application/json'},
@@ -429,7 +479,6 @@ extension PocketBaseTestUser on PocketBaseService {
       }
     }
 
-    // 2. If not found, create the test user
     final createResponse = await http.post(
       Uri.parse('${PocketBaseService.apiUrl}/collections/users/records'),
       headers: {'Content-Type': 'application/json'},
@@ -447,7 +496,6 @@ extension PocketBaseTestUser on PocketBaseService {
       return data['id'] as String;
     }
 
-    // 3. If creation failed, return null
     return null;
   }
 }

@@ -7,8 +7,9 @@ import 'dart:async';
 import '../../utils/app_theme.dart';
 import '../../user_screens/home/home_screen.dart';
 import '../../providers/cart_provider.dart';
-import '../../providers/product_provider.dart';
+// import '../../providers/product_provider.dart';
 import '../../providers/payment_provider.dart';
+import '../../providers/order_provider.dart';
 import '../../models/payment_model.dart';
 import '../../utils/pocketbase_debug.dart';
 import '../../services/payment_service.dart';
@@ -30,6 +31,9 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   bool _isPaymentConfirmed = false;
   Timer? _paymentStatusTimer;
   bool _isCartClearing = false;
+  bool _isOrderCreating = false;
+  
+  StateSetter? _dialogSetState;
 
   @override
   void initState() {
@@ -57,7 +61,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
     
     _animationController.forward();
 
-    // Load cart items when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CartProvider>().loadCartItems();
     });
@@ -70,59 +73,160 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // Generate QR code data with payment ID
   String _generatePaymentQRData(String paymentId) {
-    return paymentId; // Simple QR code with just the payment ID
+    return paymentId;
   }
 
-  // Check payment status periodically and clear cart when confirmed
   void _startPaymentStatusCheck(String paymentId) {
+    debugPrint('🔄 Starting payment status check for: $paymentId');
+    
     _paymentStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) {
+        debugPrint('⚠️ Widget unmounted, canceling timer');
         timer.cancel();
         return;
       }
 
-      final paymentProvider = context.read<PaymentProvider>();
-      final payment = await paymentProvider.getPaymentById(paymentId);
-      
-      if (payment != null && payment.isConfirmed) {
-        timer.cancel();
-        if (mounted) {
-          debugPrint('Payment confirmed! Clearing cart from database...');
-          
-          // Clear cart from database when payment is confirmed
-          await _clearCartFromDatabase(payment.userId);
-          
-          setState(() {
-            _isPaymentConfirmed = true;
-            _currentPayment = payment;
-          });
-          _showPaymentConfirmedAnimation();
+      try {
+        debugPrint('🔍 Checking payment status for: $paymentId');
+        
+        final paymentProvider = context.read<PaymentProvider>();
+        final payment = await paymentProvider.getPaymentById(paymentId);
+        
+        if (payment == null) {
+          debugPrint('⚠️ Payment not found: $paymentId');
+          return;
         }
+
+        debugPrint('📊 Payment status: ${payment.status} (confirmed: ${payment.isConfirmed})');
+        
+        if (payment.isConfirmed && payment.status == true) {
+          debugPrint('✅ Payment confirmed! Creating order...');
+          timer.cancel();
+          
+          if (mounted) {
+            await _handlePaymentConfirmation(payment);
+          }
+        }
+      } catch (e) {
+        debugPrint('❌ Error checking payment status: $e');
       }
     });
   }
 
-  // Clear cart items from database for the specific user
+  Future<void> _handlePaymentConfirmation(PaymentModel payment) async {
+    try {
+      setState(() {
+        _isOrderCreating = true;
+      });
+      
+      if (_dialogSetState != null) {
+        _dialogSetState!(() {
+          _isOrderCreating = true;
+        });
+      }
+
+      debugPrint('🔄 Handling payment confirmation for: ${payment.id}');
+      debugPrint('👤 User ID: ${payment.userId}');
+      debugPrint('💰 Total Price: ${payment.totalPrice}');
+      debugPrint('📦 Total Items: ${payment.totalItems}');
+      debugPrint('🛍️ Items: ${payment.items.length}');
+
+      // Validate payment data
+      if (payment.userId.isEmpty) {
+        throw Exception('Payment missing user ID');
+      }
+      if (payment.items.isEmpty) {
+        throw Exception('Payment has no items');
+      }
+
+      // Prepare order items data
+      final orderItems = {
+        'items': payment.items.map((item) {
+          final itemJson = item.toJson();
+          debugPrint('📝 Item data: $itemJson');
+          return itemJson;
+        }).toList(),
+        'total_price': payment.totalPrice,
+        'total_items': payment.totalItems,
+      };
+
+      debugPrint('📋 Order items prepared: $orderItems');
+
+      // Create order
+      final orderProvider = context.read<OrderProvider>();
+      final order = await orderProvider.createOrder(
+        usersId: payment.userId,
+        paymentId: payment.id,
+        items: orderItems,
+      );
+
+      if (order != null) {
+        debugPrint('✅ Order created successfully: ${order.id}');
+        
+        // Clear cart from database
+        await _clearCartFromDatabase(payment.userId);
+        
+        setState(() {
+          _isPaymentConfirmed = true;
+          _currentPayment = payment;
+          _isOrderCreating = false;
+        });
+      
+        if (_dialogSetState != null) {
+          _dialogSetState!(() {
+            _isPaymentConfirmed = true;
+            _currentPayment = payment;
+            _isOrderCreating = false;
+          });
+        }
+      
+        _showPaymentConfirmedAnimation();
+      } else {
+        throw Exception('Failed to create order - orderProvider returned null');
+      }
+
+    } catch (e) {
+      debugPrint('❌ Error handling payment confirmation: $e');
+      
+      setState(() {
+        _isOrderCreating = false;
+      });
+      
+      if (_dialogSetState != null) {
+        _dialogSetState!(() {
+          _isOrderCreating = false;
+        });
+      }
+      
+      if (mounted) {
+        _showErrorSnackBar('Failed to create order: ${e.toString()}');
+      }
+    }
+  }
+
   Future<void> _clearCartFromDatabase(String userId) async {
     try {
       setState(() {
         _isCartClearing = true;
       });
+    
+      if (_dialogSetState != null) {
+        _dialogSetState!(() {
+          _isCartClearing = true;
+        });
+      }
 
       final cartProvider = context.read<CartProvider>();
       
-      debugPrint('Clearing cart from database for user: $userId');
+      debugPrint('🧹 Clearing cart from database for user: $userId');
       
-      // Use the CartProvider method to clear cart for the specific user
       await cartProvider.clearCartForPayment(userId);
       
       debugPrint('✅ Cart cleared successfully from database');
       
     } catch (e) {
       debugPrint('❌ Error clearing cart from database: $e');
-      // Show error but don't prevent the payment confirmation flow
       if (mounted) {
         _showErrorSnackBar('Cart cleared locally but may need manual cleanup in database');
       }
@@ -131,6 +235,12 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
         setState(() {
           _isCartClearing = false;
         });
+      
+        if (_dialogSetState != null) {
+          _dialogSetState!(() {
+            _isCartClearing = false;
+          });
+        }
       }
     }
   }
@@ -142,10 +252,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       body: SafeArea(
         child: Column(
           children: [
-            // Enhanced Header
             _buildEnhancedHeader(),
-            
-            // Content
             Expanded(
               child: Consumer<CartProvider>(
                 builder: (context, cartProvider, child) {
@@ -257,7 +364,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       builder: (context, cartProvider, child) {
                         if (cartProvider.cartItems.isNotEmpty) {
                           return Text(
-                            '${cartProvider.totalItems} items • Rp ${cartProvider.totalPrice}',
+                            '${cartProvider.totalItems} items • Rp ${cartProvider.totalCartValue}',
                             style: GoogleFonts.poppins(
                               color: AppTheme.warmBeige,
                               fontSize: 14,
@@ -309,7 +416,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Animated Coffee Cup
                 Container(
                   width: 160,
                   height: 160,
@@ -335,7 +441,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 
                 const SizedBox(height: 32),
                 
-                // Title
                 ShaderMask(
                   shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
                   child: Text(
@@ -351,7 +456,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 
                 const SizedBox(height: 12),
                 
-                // Subtitle
                 Text(
                   'Discover our amazing coffee collection\nand add your favorites to get started!',
                   style: GoogleFonts.poppins(
@@ -364,7 +468,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 
                 const SizedBox(height: 40),
                 
-                // Action Button
                 Container(
                   decoration: BoxDecoration(
                     gradient: AppTheme.primaryGradient,
@@ -460,7 +563,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
             children: [
               Row(
                 children: [
-                  // Product Image
                   Container(
                     width: 80,
                     height: 80,
@@ -479,7 +581,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(20),
                             child: Image.network(
-                              context.read<ProductProvider>().getImageUrlFromPath(item.productImage!),
+                              item.productImageUrl ?? 'url_default_placeholder',
                               width: 80,
                               height: 80,
                               fit: BoxFit.cover,
@@ -505,7 +607,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(width: 16),
                   
-                  // Product Details
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,7 +621,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 8),
                         
-                        // Temperature & Sweetness
                         if (item.temperature.isNotEmpty && item.temperature != '-')
                           Wrap(
                             spacing: 8,
@@ -533,7 +633,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         
                         const SizedBox(height: 8),
                         
-                        // Special Notes
                         if (item.specialNotes.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(8),
@@ -565,7 +664,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         
                         const SizedBox(height: 12),
                         
-                        // Price
                         Text(
                           'Rp ${item.productPrice ?? 0}',
                           style: GoogleFonts.oswald(
@@ -582,11 +680,9 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
               
               const SizedBox(height: 16),
               
-              // Quantity Controls & Actions
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Quantity Controls
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -634,7 +730,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     ),
                   ),
                   
-                  // Total Price & Remove
                   Row(
                     children: [
                       Column(
@@ -755,7 +850,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Order Summary
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -775,7 +869,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                           ),
                           Text(
-                            'Rp ${cartProvider.totalPrice}',
+                            'Rp ${cartProvider.totalCartValue}',
                             style: GoogleFonts.poppins(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -810,7 +904,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                           ),
                           Text(
-                            'Rp ${cartProvider.totalPrice}',
+                            'Rp ${cartProvider.totalCartValue}',
                             style: GoogleFonts.oswald(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -825,7 +919,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 
                 const SizedBox(height: 20),
                 
-                // Pay Button
                 Container(
                   width: double.infinity,
                   height: 56,
@@ -1095,16 +1188,13 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   }
 
   void _showPayAtCashierDialog() async {
-    // Debug PocketBase connection first
     if (kDebugMode) {
       await PocketBaseDebug.debugPocketBase();
     }
 
-    // Create payment from cart items
     final cartProvider = context.read<CartProvider>();
     final paymentProvider = context.read<PaymentProvider>();
     
-    // Test the payment service connection
     final paymentService = PaymentService();
     final connectionTest = await paymentService.testConnection();
     
@@ -1113,23 +1203,20 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       return;
     }
     
-    // List collections for debugging
     if (kDebugMode) {
       await paymentService.listCollections();
     }
     
-    debugPrint('Creating payment from cart items');
-    debugPrint('Cart items count: ${cartProvider.cartItems.length}');
+    debugPrint('🔄 Creating payment from cart items');
+    debugPrint('📦 Cart items count: ${cartProvider.cartItems.length}');
     
-    // Validate cart items have user IDs
     if (cartProvider.cartItems.isEmpty) {
       _showErrorSnackBar('Cart is empty');
       return;
     }
     
-    // Check user IDs in cart items
     final userIds = cartProvider.cartItems.map((item) => item.usersId).toSet();
-    debugPrint('User IDs in cart: $userIds');
+    debugPrint('👥 User IDs in cart: $userIds');
     
     if (userIds.isEmpty || userIds.contains('') || userIds.contains(null)) {
       _showErrorSnackBar('Cart items are missing user information. Please refresh and try again.');
@@ -1141,7 +1228,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       return;
     }
     
-    // Create payment using the updated method (no userId parameter needed)
+    // Create payment but don't create order yet - order will be created when payment is confirmed
+    debugPrint('💳 Creating payment...');
     final payment = await paymentProvider.createPaymentFromCart(
       cartItems: cartProvider.cartItems,
     );
@@ -1152,12 +1240,16 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       return;
     }
     
+    debugPrint('✅ Payment created: ${payment.id}');
+    debugPrint('👤 Payment user ID: ${payment.userId}');
+    debugPrint('💰 Payment total: ${payment.totalPrice}');
+    debugPrint('📦 Payment items: ${payment.items.length}');
+    
     setState(() {
       _currentPayment = payment;
       _isPaymentConfirmed = false;
     });
     
-    // Start checking payment status
     _startPaymentStatusCheck(payment.id);
     
     if (!mounted) return;
@@ -1167,6 +1259,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          _dialogSetState = setDialogState;
+          
           return Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(32),
@@ -1189,7 +1283,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header with QR Icon
                   Container(
                     width: 80,
                     height: 80,
@@ -1209,7 +1302,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    child: _isCartClearing 
+                    child: (_isCartClearing || _isOrderCreating)
                         ? const SizedBox(
                             width: 40,
                             height: 40,
@@ -1227,17 +1320,18 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 20),
                   
-                  // Title
                   ShaderMask(
                     shaderCallback: (bounds) => (_isPaymentConfirmed 
                         ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
                         : AppTheme.primaryGradient).createShader(bounds),
                     child: Text(
-                      _isCartClearing 
-                          ? 'Clearing Cart...'
-                          : _isPaymentConfirmed 
-                              ? 'Payment Confirmed!' 
-                              : 'Payment QR Code',
+                      _isOrderCreating 
+                          ? 'Creating Order...'
+                          : _isCartClearing 
+                              ? 'Clearing Cart...'
+                              : _isPaymentConfirmed 
+                                  ? 'Order Created!' 
+                                  : 'Payment QR Code',
                       style: GoogleFonts.oswald(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -1249,7 +1343,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 8),
                   
-                  // Order Number
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
@@ -1268,7 +1361,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 20),
                   
-                  // QR Code or Success Message
                   if (!_isPaymentConfirmed) ...[
                     Container(
                       padding: const EdgeInsets.all(20),
@@ -1328,7 +1420,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ] else ...[
-                    // Success Animation
                     Container(
                       width: 200,
                       height: 200,
@@ -1358,7 +1449,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Payment Successful!',
+                            'Order Created!',
                             style: GoogleFonts.oswald(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -1367,7 +1458,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Cart cleared from database',
+                            'Successfully saved to database',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               color: AppTheme.charcoalGray,
@@ -1380,7 +1471,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 20),
                   
-                  // Instructions or Status
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1409,7 +1499,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _isPaymentConfirmed ? 'Payment Status' : 'Payment Instructions',
+                              _isPaymentConfirmed ? 'Order Status' : 'Payment Instructions',
                               style: GoogleFonts.oswald(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -1421,8 +1511,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         const SizedBox(height: 12),
                         Text(
                           _isPaymentConfirmed 
-                              ? 'Payment confirmed by cashier.\nCart has been cleared from database.\nYou can now continue shopping.'
-                              : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation\n4. Cart will be automatically cleared',
+                              ? 'Payment confirmed by cashier.\nOrder has been created and saved to database.\nCart has been cleared.\nYou can now continue shopping.'
+                              : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation\n4. Order will be automatically created',
                           style: GoogleFonts.poppins(
                             color: AppTheme.charcoalGray,
                             fontSize: 13,
@@ -1435,7 +1525,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 20),
                   
-                  // Order Summary
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1498,7 +1587,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 24),
                   
-                  // Continue Button
                   Container(
                     width: double.infinity,
                     height: 56,
@@ -1521,16 +1609,15 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ] : [],
                     ),
                     child: ElevatedButton(
-                      onPressed: (_isPaymentConfirmed && !_isCartClearing) ? () {
+                      onPressed: (_isPaymentConfirmed && !_isCartClearing && !_isOrderCreating) ? () {
                         _paymentStatusTimer?.cancel();
-                        Navigator.of(context).pop(); // Close the dialog
+                        Navigator.of(context).pop();
                         
-                        // Navigate to home screen
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(
                             builder: (context) => const HomeScreen(),
                           ),
-                          (route) => route.isFirst, // Keep only the first route (home)
+                          (route) => route.isFirst,
                         );
                       } : null,
                       style: ElevatedButton.styleFrom(
@@ -1543,7 +1630,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (_isCartClearing) ...[
+                          if (_isCartClearing || _isOrderCreating) ...[
                             const SizedBox(
                               width: 24,
                               height: 24,
@@ -1563,11 +1650,13 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           ],
                           const SizedBox(width: 12),
                           Text(
-                            _isCartClearing 
-                                ? 'Clearing Cart...'
-                                : _isPaymentConfirmed 
-                                    ? 'Continue' 
-                                    : 'Waiting for Confirmation...',
+                            _isOrderCreating 
+                                ? 'Creating Order...'
+                                : _isCartClearing 
+                                    ? 'Clearing Cart...'
+                                    : _isPaymentConfirmed 
+                                        ? 'Continue' 
+                                        : 'Waiting for Confirmation...',
                             style: GoogleFonts.oswald(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -1586,23 +1675,23 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
         },
       ),
     ).then((_) {
-      // Clean up timer when dialog is closed
       _paymentStatusTimer?.cancel();
+      _dialogSetState = null;
     });
   }
 
   void _showPaymentConfirmedAnimation() {
-    // You can add a subtle animation or sound here
-    // For now, we'll just show a brief snackbar
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
             const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
-            Text(
-              'Payment confirmed! Cart cleared from database.',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            Expanded(
+              child: Text(
+                'Payment confirmed! Order created and saved to database.',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         ),
@@ -1611,7 +1700,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ),
     );
   }

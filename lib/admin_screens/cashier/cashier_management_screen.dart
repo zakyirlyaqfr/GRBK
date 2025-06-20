@@ -8,13 +8,16 @@ import 'package:provider/provider.dart';
 import '../../utils/app_theme.dart';
 import '../../providers/payment_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/order_provider.dart';
 import '../../models/payment_model.dart';
+import '../../services/debug_service.dart';
 
 class CashierManagementScreen extends StatefulWidget {
   const CashierManagementScreen({super.key});
 
   @override
-  State<CashierManagementScreen> createState() => _CashierManagementScreenState();
+  State<CashierManagementScreen> createState() =>
+      _CashierManagementScreenState();
 }
 
 class _CashierManagementScreenState extends State<CashierManagementScreen>
@@ -51,7 +54,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
       curve: Curves.easeInOut,
     ));
 
-    // Check camera permission
     _checkCameraPermission();
   }
 
@@ -65,12 +67,10 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
   Future<void> _checkCameraPermission() async {
     if (_isWebPlatform) {
-      // For web, we'll handle permission during camera initialization
       setState(() {
         _isCameraPermissionGranted = true;
       });
     } else {
-      // For mobile platforms
       final status = await Permission.camera.status;
       setState(() {
         _isCameraPermissionGranted = status.isGranted;
@@ -80,7 +80,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
   Future<void> _requestCameraPermission() async {
     if (_isWebPlatform) {
-      // Web handles permissions automatically during camera access
       _initializeCamera();
     } else {
       final status = await Permission.camera.request();
@@ -234,15 +233,9 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header - Responsive
                   _buildResponsiveHeader(constraints),
-
                   SizedBox(height: isSmallScreen ? 16 : 20),
-
-                  // Platform indicator for web
                   if (_isWebPlatform) _buildWebIndicator(),
-
-                  // Main Content - Responsive with proper constraints
                   Expanded(
                     child: _isStarted
                         ? _buildCashierInterface(constraints)
@@ -320,7 +313,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Coffee Icon
             Container(
               width: isVerySmallScreen ? 80 : 100,
               height: isVerySmallScreen ? 80 : 100,
@@ -344,7 +336,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 20 : 24),
 
-            // Welcome Text
             Text(
               'Start #TeamGRBK',
               style: GoogleFonts.oswald(
@@ -371,7 +362,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 24 : 32),
 
-            // Start Button
             Container(
               width: double.infinity,
               height: isVerySmallScreen ? 44 : 48,
@@ -435,48 +425,36 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
     final isSmallScreen = constraints.maxWidth < 600;
 
     if (isSmallScreen) {
-      // Mobile layout - Stack vertically with proper scrolling and fixed heights
       return SingleChildScrollView(
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minHeight:
-                constraints.maxHeight - 100, // Account for header and padding
+            minHeight: constraints.maxHeight - 100,
           ),
           child: IntrinsicHeight(
             child: Column(
               children: [
-                // Scan Section - Fixed height to prevent overflow
                 SizedBox(
-                  height: 320, // Fixed height
+                  height: 320,
                   child: _buildScanSection(constraints),
                 ),
-
                 const SizedBox(height: 16),
-
-                // Manual Input Section - Fixed height to prevent overflow
                 SizedBox(
-                  height: 320, // Fixed height
+                  height: 320,
                   child: _buildManualInputSection(constraints),
                 ),
-
-                const SizedBox(height: 20), // Bottom padding
+                const SizedBox(height: 20),
               ],
             ),
           ),
         ),
       );
     } else {
-      // Desktop layout - Side by side
       return Row(
         children: [
-          // Scan Section
           Expanded(
             child: _buildScanSection(constraints),
           ),
-
           const SizedBox(width: 16),
-
-          // Manual Input Section
           Expanded(
             child: _buildManualInputSection(constraints),
           ),
@@ -504,7 +482,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // QR Scan Icon - Same style as manual input
           Container(
             width: isVerySmallScreen ? 70 : 80,
             height: isVerySmallScreen ? 70 : 80,
@@ -571,7 +548,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
           SizedBox(height: isVerySmallScreen ? 16 : 20),
 
-          // Camera Preview Area (when scanning)
           if (_isScanning && _isCameraInitialized && _cameraController != null)
             Container(
               height: 120,
@@ -588,7 +564,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
               ),
             ),
 
-          // Scan Button - Same style as manual input
           Container(
             width: double.infinity,
             height: isVerySmallScreen ? 36 : 40,
@@ -656,7 +631,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Manual Input Icon
             Container(
               width: isVerySmallScreen ? 70 : 80,
               height: isVerySmallScreen ? 70 : 80,
@@ -703,7 +677,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 16 : 20),
 
-            // Order ID Input
             TextField(
               controller: _orderIdController,
               style: GoogleFonts.poppins(
@@ -728,7 +701,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppTheme.deepNavy, width: 2),
+                  borderSide:
+                      const BorderSide(color: AppTheme.deepNavy, width: 2),
                 ),
                 filled: true,
                 fillColor: AppTheme.softWhite,
@@ -738,7 +712,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 12 : 16),
 
-            // Search Button
             Container(
               width: double.infinity,
               height: isVerySmallScreen ? 36 : 40,
@@ -800,7 +773,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
             Row(
               children: [
                 Container(
@@ -858,7 +830,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 12 : 16),
 
-            // Customer Info
             Container(
               padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
               decoration: BoxDecoration(
@@ -871,7 +842,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                     radius: isVerySmallScreen ? 16 : 20,
                     backgroundColor: AppTheme.deepNavy,
                     child: Text(
-                      _currentPayment!.userName.isNotEmpty 
+                      _currentPayment!.userName.isNotEmpty
                           ? _currentPayment!.userName[0].toUpperCase()
                           : 'U',
                       style: GoogleFonts.oswald(
@@ -887,8 +858,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _currentPayment!.userName.isNotEmpty 
-                              ? _currentPayment!.userName 
+                          _currentPayment!.userName.isNotEmpty
+                              ? _currentPayment!.userName
                               : 'Unknown Customer',
                           style: GoogleFonts.poppins(
                             fontSize: isVerySmallScreen ? 12 : 14,
@@ -912,7 +883,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 12 : 16),
 
-            // Order Items
             Text(
               'Item Pesanan',
               style: GoogleFonts.oswald(
@@ -924,9 +894,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 8 : 12),
 
-            // Order Items List - Fixed height container to prevent overflow
             SizedBox(
-              height: 120, // Fixed height
+              height: 120,
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 8),
                 itemCount: _currentPayment!.items.length,
@@ -982,7 +951,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 12 : 16),
 
-            // Total
             Container(
               padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
               decoration: BoxDecoration(
@@ -1014,7 +982,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
             SizedBox(height: isVerySmallScreen ? 12 : 16),
 
-            // Confirm Button
             Container(
               width: double.infinity,
               height: isVerySmallScreen ? 44 : 48,
@@ -1080,11 +1047,9 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
     if (_isCameraInitialized) {
       _pulseController.repeat(reverse: true);
 
-      // Simulate scan success after 3 seconds
       Timer(const Duration(seconds: 3), () {
         if (_isScanning && mounted) {
           _stopScanning();
-          // Simulate finding a payment (you would replace this with actual QR scanning logic)
           _simulatePaymentFound();
         }
       });
@@ -1093,7 +1058,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
         if (_isCameraInitialized && mounted) {
           _pulseController.repeat(reverse: true);
 
-          // Simulate scan success after 3 seconds
           Timer(const Duration(seconds: 3), () {
             if (_isScanning && mounted) {
               _stopScanning();
@@ -1122,15 +1086,17 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
   void _searchOrder() async {
     if (_orderIdController.text.isNotEmpty) {
       final paymentProvider = context.read<PaymentProvider>();
-      final payment = await paymentProvider.getPaymentById(_orderIdController.text.trim());
-      
-      if (payment != null) {
+      final payment =
+          await paymentProvider.getPaymentById(_orderIdController.text.trim());
+
+      if (payment != null && payment.status == false) {
         setState(() {
           _currentPayment = payment;
           _orderFound = true;
         });
       } else {
-        _showErrorSnackBar('Payment tidak ditemukan. Periksa kembali Payment ID.');
+        _showErrorSnackBar(
+            'Payment tidak ditemukan atau sudah dikonfirmasi. Periksa kembali Payment ID.');
       }
     } else {
       _showErrorSnackBar('Masukkan Payment ID terlebih dahulu');
@@ -1138,18 +1104,20 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
   }
 
   void _simulatePaymentFound() {
-    // This simulates finding a payment via QR scan
-    // In real implementation, you would parse the QR code data to get the payment ID
-    const String simulatedPaymentId = "sample_payment_id"; // Replace with actual scanned payment ID
-    
-    context.read<PaymentProvider>().getPaymentById(simulatedPaymentId).then((payment) {
-      if (payment != null && mounted) {
+    const String simulatedPaymentId = "sample_payment_id";
+
+    context
+        .read<PaymentProvider>()
+        .getPaymentById(simulatedPaymentId)
+        .then((payment) {
+      if (payment != null && payment.status == false && mounted) {
         setState(() {
           _currentPayment = payment;
           _orderFound = true;
         });
       } else if (mounted) {
-        _showErrorSnackBar('Payment tidak ditemukan dari QR code');
+        _showErrorSnackBar(
+            'Payment tidak ditemukan atau sudah dikonfirmasi. Periksa kembali Payment ID.');
       }
     });
   }
@@ -1219,29 +1187,102 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                     child: ElevatedButton(
                       onPressed: () async {
                         Navigator.pop(context);
-                        
-                        // Update payment status to confirmed
-                        final success = await context.read<PaymentProvider>()
-                            .updatePaymentStatus(_currentPayment!.id, true);
-                        
-                        if (success) {
-                          // Clear cart items for this payment
-                          await context.read<CartProvider>().clearCartForPayment(_currentPayment!.userId);
-                          
-                          setState(() {
-                            _orderFound = false;
-                            _currentPayment = null;
-                            _orderIdController.clear();
-                          });
-                          _showSuccessSnackBar('Pembayaran berhasil dikonfirmasi!');
-                        } else {
-                          _showErrorSnackBar('Gagal mengkonfirmasi pembayaran');
+
+                        final paymentToProcess = _currentPayment!;
+
+                        // Log the confirmation process
+                        DebugService.logPaymentToOrderFlow(
+                          step: 'CASHIER_CONFIRMATION_START',
+                          data: {
+                            'payment_id': paymentToProcess.id,
+                            'user_id': paymentToProcess.userId,
+                            'total_price': paymentToProcess.totalPrice,
+                            'total_items': paymentToProcess.totalItems,
+                            'items_count': paymentToProcess.items.length,
+                          },
+                        );
+
+                        setState(() {
+                          _orderFound = false;
+                          _currentPayment = null;
+                          _orderIdController.clear();
+                        });
+
+                        try {
+                          // Update payment status to confirmed
+                          final success = await context
+                              .read<PaymentProvider>()
+                              .updatePaymentStatus(paymentToProcess.id, true);
+
+                          if (success) {
+                            DebugService.logPaymentToOrderFlow(
+                              step: 'PAYMENT_STATUS_UPDATED',
+                              data: {
+                                'payment_id': paymentToProcess.id,
+                                'new_status': true,
+                              },
+                            );
+
+                            // Create order from payment when status becomes true
+                            final orderItems = {
+                              'items': paymentToProcess.items
+                                  .map((item) => item.toJson())
+                                  .toList(),
+                              'total_price': paymentToProcess.totalPrice,
+                              'total_items': paymentToProcess.totalItems,
+                            };
+
+                            DebugService.logPaymentToOrderFlow(
+                              step: 'CREATING_ORDER',
+                              data: {
+                                'payment_id': paymentToProcess.id,
+                                'user_id': paymentToProcess.userId,
+                                'order_items': orderItems,
+                              },
+                            );
+
+                            final order = await context.read<OrderProvider>().createOrder(
+                              usersId: paymentToProcess.userId,
+                              paymentId: paymentToProcess.id,
+                              items: orderItems,
+                            );
+
+                            if (order != null) {
+                              DebugService.logSuccess(
+                                operation: 'ORDER_CREATION',
+                                result: {
+                                  'order_id': order.id,
+                                  'payment_id': order.paymentId,
+                                  'user_id': order.usersId,
+                                },
+                              );
+
+                              // Clear cart items for this payment
+                              await context
+                                  .read<CartProvider>()
+                                  .clearCartForPayment(paymentToProcess.userId);
+
+                              _showSuccessSnackBar(
+                                  'Pembayaran berhasil dikonfirmasi dan order telah dibuat!');
+                            } else {
+                              throw Exception('Order creation returned null');
+                            }
+                          } else {
+                            throw Exception('Failed to update payment status');
+                          }
+                        } catch (e) {
+                          DebugService.logError(
+                            context: 'CASHIER_PAYMENT_CONFIRMATION',
+                            error: e,
+                          );
                         }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                       child: Text(
                         'Konfirmasi',

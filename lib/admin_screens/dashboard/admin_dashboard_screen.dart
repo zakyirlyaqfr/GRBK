@@ -10,6 +10,7 @@ import '../stock/stock_management_screen.dart';
 import '../users/user_management_screen.dart';
 import '../cashier/cashier_management_screen.dart';
 import '../reports/reports_screen.dart';
+import '../../user_screens/auth/login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -35,7 +36,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Basic Espresso',
     'Sparkling Fruity',
     'Milk Base',
-    'Tea Series',
     'Food'
   ];
 
@@ -441,6 +441,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          (route) => false,
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.logout_rounded,
+                              color: Colors.red,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Logout',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.red,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -699,8 +746,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
-    if (_selectedCategory == 'All') return products;
-    return products.where((product) => product.category == _selectedCategory).toList();
+    List<ProductModel> filtered;
+    if (_selectedCategory == 'All') {
+      filtered = List<ProductModel>.from(products);
+    } else {
+      filtered = products.where((product) => product.category == _selectedCategory).toList();
+    }
+    filtered.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return filtered;
   }
 
   Widget _buildStatCard(

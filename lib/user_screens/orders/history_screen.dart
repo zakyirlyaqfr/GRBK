@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../product/product_detail_screen.dart';
-// ignore: unused_import
-import '../profile/profile_screen.dart';
-// ignore: unused_import
-import '../cart/cart_screen.dart';
+import 'package:provider/provider.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/order_provider.dart';
+import '../../services/pocketbase_service.dart';
+import '../../models/order_model.dart';
+import '../../models/product_model.dart';
+import '../../services/product_services.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -15,93 +16,68 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  final List<Map<String, dynamic>> _orders = [
-    {
-      'id': 'GRBK001',
-      'date': '2024-01-15',
-      'time': '14:30',
-      'status': 'Completed',
-      'total': 78000,
-      'items': [
-        {
-          'name': 'GRBK Special Blend',
-          'price': 35000,
-          'image': '☕',
-          'category': 'Kopi Susu',
-          'description': 'Our signature specialty coffee blend with notes of chocolate and caramel',
-        },
-        {
-          'name': 'Artisan Croissant',
-          'price': 18000,
-          'image': '🥐',
-          'category': 'Food',
-          'description': 'Buttery croissant baked fresh daily',
-        },
-      ],
-    },
-    {
-      'id': 'GRBK002',
-      'date': '2024-01-14',
-      'time': '09:15',
-      'status': 'Completed',
-      'total': 53000,
-      'items': [
-        {
-          'name': 'Single Origin Americano',
-          'price': 25000,
-          'image': '☕',
-          'category': 'Basic Espresso',
-          'description': 'Bold and smooth americano from single origin beans',
-        },
-        {
-          'name': 'Matcha Latte',
-          'price': 30000,
-          'image': '🍵',
-          'category': 'Milk Base',
-          'description': 'Premium matcha with creamy milk foam',
-        },
-      ],
-    },
-    {
-      'id': 'GRBK003',
-      'date': '2024-01-13',
-      'time': '16:45',
-      'status': 'Completed',
-      'total': 46000,
-      'items': [
-        {
-          'name': 'Lemon Mint Refresher',
-          'price': 28000,
-          'image': '🍋',
-          'category': 'Sparkling Fruity',
-          'description': 'Fresh lemon with mint leaves, perfect for hot days',
-        },
-        {
-          'name': 'Earl Grey Tea',
-          'price': 22000,
-          'image': '🫖',
-          'category': 'Tea Series',
-          'description': 'Classic earl grey with bergamot essence',
-        },
-      ],
-    },
-    {
-      'id': 'GRBK004',
-      'date': '2024-01-12',
-      'time': '11:20',
-      'status': 'Completed',
-      'total': 35000,
-      'items': [
-        {
-          'name': 'GRBK Special Blend',
-          'price': 35000,
-          'image': '☕',
-          'category': 'Kopi Susu',
-          'description': 'Our signature specialty coffee blend with notes of chocolate and caramel',
-        },
-      ],
-    },
-  ];
+  final PocketBaseService _pocketbaseService = PocketBaseService();
+  final ProductService _productService = ProductService();
+  List<OrderModel> _userOrders = [];
+  Map<String, ProductModel> _productCache = {};
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserOrders();
+  }
+
+  Future<void> _loadUserOrders() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = _pocketbaseService.currentUser;
+      if (user != null) {
+        final orderProvider = context.read<OrderProvider>();
+        await orderProvider.loadOrdersByUserId(user.id);
+
+        _userOrders = orderProvider.orders;
+
+        // Step 1: Kumpulkan semua product_id unik
+        final productIds = <String>{};
+        for (final order in _userOrders) {
+          final items = order.items['items'] as List<dynamic>? ?? [];
+          for (final item in items) {
+            final pid = item['product_id'] ?? item['productId'];
+            if (pid != null) productIds.add(pid);
+          }
+        }
+
+        // Step 2: Fetch detail produk dan simpan ke cache
+        for (final pid in productIds) {
+          if (!_productCache.containsKey(pid)) {
+            final product = await _productService.fetchProductById(pid);
+            if (product != null) {
+              _productCache[pid] = product;
+            }
+          }
+        }
+
+        debugPrint(
+            '✅ Loaded ${_userOrders.length} orders for user: ${user.id}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading user orders: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  int get _totalOrders => _userOrders.length;
+  int get _totalSpent => _userOrders.fold(0, (sum, order) {
+        final totalPrice = order.items['total_price'] as int? ?? 0;
+        return sum + totalPrice;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -109,12 +85,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Enhanced Header Section
             _buildEnhancedHeader(),
-            
-            // Orders List
             Expanded(
-              child: _buildOrdersList(),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildOrdersList(),
             ),
           ],
         ),
@@ -134,7 +109,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       child: Column(
         children: [
-          // Main Header Content
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -142,7 +116,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Updated greeting with cool font
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
                         colors: [
@@ -162,7 +135,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Your order here!',
+                      'Your order history!',
                       style: GoogleFonts.poppins(
                         color: AppTheme.warmBeige,
                         fontSize: 16,
@@ -172,7 +145,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
               ),
-              // Decorative Logo
               Container(
                 width: 60,
                 height: 60,
@@ -187,33 +159,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.asset(
-                    'assets/images/grbk_logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.receipt_long_rounded,
-                        color: AppTheme.deepNavy,
-                        size: 30,
-                      );
-                    },
-                  ),
+                child: const Icon(
+                  Icons.receipt_long_rounded,
+                  color: AppTheme.deepNavy,
+                  size: 30,
                 ),
               ),
             ],
           ),
-          
           const SizedBox(height: 20),
-          
-          // Stats Row
           Row(
             children: [
               Expanded(
                 child: _buildStatContainer(
                   'Total Orders',
-                  '${_orders.length}',
+                  '$_totalOrders',
                   Icons.shopping_bag_rounded,
                 ),
               ),
@@ -221,7 +181,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Expanded(
                 child: _buildStatContainer(
                   'Total Spent',
-                  'Rp ${_orders.fold(0, (sum, order) => sum + (order['total'] as int))}',
+                  'Rp $_totalSpent',
                   Icons.payments_rounded,
                 ),
               ),
@@ -274,15 +234,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildOrdersList() {
-    if (_orders.isEmpty) {
+    if (_userOrders.isEmpty) {
       return _buildEmptyState();
     }
 
     return ListView.builder(
       padding: const EdgeInsets.all(24),
-      itemCount: _orders.length,
+      itemCount: _userOrders.length,
       itemBuilder: (context, index) {
-        final order = _orders[index];
+        final order = _userOrders[index];
         return _buildEnhancedOrderCard(order);
       },
     );
@@ -329,7 +289,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildEnhancedOrderCard(Map<String, dynamic> order) {
+  Widget _buildEnhancedOrderCard(OrderModel order) {
+    final items = order.items['items'] as List<dynamic>? ?? [];
+    final totalPrice = order.items['total_price'] as int? ?? 0;
+    final totalItems = order.items['total_items'] as int? ?? 0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
@@ -356,7 +320,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Order Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -364,7 +327,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Order #${order['id']}',
+                          'Order #${order.id.substring(0, 8).toUpperCase()}',
                           style: GoogleFonts.oswald(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -372,7 +335,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ),
                         ),
                         Text(
-                          '${order['date']} • ${order['time']}',
+                          '${order.created.day}/${order.created.month}/${order.created.year} • ${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}',
                           style: GoogleFonts.poppins(
                             fontSize: 14,
                             color: AppTheme.charcoalGray,
@@ -381,13 +344,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         gradient: AppTheme.primaryGradient,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        order['status'],
+                        'Completed',
                         style: GoogleFonts.poppins(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -397,72 +361,218 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   ],
                 ),
-                
                 const SizedBox(height: 16),
-                
-                // Order Items Preview
-                ...order['items'].take(2).map<Widget>((item) => Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.softWhite,
-                    borderRadius: BorderRadius.circular(16),
+
+                // Enhanced items display with product details
+                Text(
+                  'Items ($totalItems):',
+                  style: GoogleFonts.oswald(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.deepNavy,
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.neutralGradient,
-                          borderRadius: BorderRadius.circular(12),
+                ),
+                const SizedBox(height: 8),
+
+                ...items.take(3).map<Widget>((item) {
+                  final productName = item['product_name'] ??
+                      item['productName'] ??
+                      'Unknown Product';
+                  final productPrice =
+                      item['product_price'] ?? item['productPrice'] ?? 0;
+                  final quantity = item['quantity'] ?? 1;
+                  final itemTotal = item['total_price'] ??
+                      item['totalPrice'] ??
+                      (productPrice * quantity);
+                  final temperature = item['temperature'] ?? '';
+                  final sweetness = item['sweetness'] ?? '';
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.softWhite,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        // Product image
+                        Builder(
+                          builder: (_) {
+                            final productId =
+                                item['product_id'] ?? item['productId'];
+                            final product = _productCache[productId];
+                            final imageName = product?.image;
+                            if (productId != null &&
+                                imageName != null &&
+                                imageName.isNotEmpty) {
+                              final imageUrl =
+                                  '${PocketBaseService.baseUrl}/api/files/products/$productId/$imageName';
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  imageUrl,
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                    width: 50,
+                                    height: 50,
+                                    color: AppTheme.softWhite,
+                                    child: const Icon(Icons.coffee_rounded,
+                                        color: Colors.grey),
+                                  ),
+                                ),
+                              );
+                            } else {
+                              return Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  gradient: AppTheme.neutralGradient,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.coffee_rounded,
+                                    size: 24,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
                         ),
-                        child: Center(
-                          child: Text(
-                            item['image'],
-                            style: const TextStyle(fontSize: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                productName,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.deepNavy,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Qty: $quantity',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: AppTheme.charcoalGray,
+                                    ),
+                                  ),
+                                  if (temperature.isNotEmpty &&
+                                      temperature != '-') ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.warmBeige
+                                            .withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        temperature,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          color: AppTheme.deepNavy,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (sweetness.isNotEmpty &&
+                                      sweetness != '-') ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.warmBeige
+                                            .withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        sweetness,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          color: AppTheme.deepNavy,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Text(
+                                'Rp $productPrice each',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: AppTheme.charcoalGray
+                                      .withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          item['name'],
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.deepNavy,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Rp $itemTotal',
+                              style: GoogleFonts.oswald(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text(
-                        'Rp ${item['price']}',
-                        style: GoogleFonts.oswald(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.deepNavy,
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-                
-                if (order['items'].length > 2)
+                      ],
+                    ),
+                  );
+                }),
+
+                if (items.length > 3)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      '+${order['items'].length - 2} more items',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppTheme.charcoalGray,
-                        fontStyle: FontStyle.italic,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warmBeige.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppTheme.warmBeige.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.more_horiz,
+                            color: AppTheme.charcoalGray,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '+${items.length - 3} more items',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppTheme.charcoalGray,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                
+
                 const SizedBox(height: 16),
-                
-                // Order Footer
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -483,7 +593,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             ),
                           ),
                           Text(
-                            'Rp ${order['total']}',
+                            'Rp $totalPrice',
                             style: GoogleFonts.oswald(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -505,7 +615,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ],
                         ),
                         child: ElevatedButton(
-                          onPressed: () => _showReorderOptions(order['items']),
+                          onPressed: () => _showReorderOptions(items),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.transparent,
                             shadowColor: Colors.transparent,
@@ -534,7 +644,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  void _showOrderDetails(Map<String, dynamic> order) {
+  void _showOrderDetails(OrderModel order) {
+    final items = order.items['items'] as List<dynamic>? ?? [];
+    final totalPrice = order.items['total_price'] as int? ?? 0;
+    final totalItems = order.items['total_items'] as int? ?? 0;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -547,7 +661,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
         child: Column(
           children: [
-            // Handle bar
             Container(
               margin: const EdgeInsets.only(top: 12),
               width: 40,
@@ -557,8 +670,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
-            // Header
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -572,7 +683,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Order #${order['id']}',
+                        'Order #${order.id.substring(0, 8).toUpperCase()}',
                         style: GoogleFonts.oswald(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -580,22 +691,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                       ),
                       Text(
-                        '${order['date']} • ${order['time']}',
+                        '${order.created.day}/${order.created.month}/${order.created.year} • ${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}',
                         style: GoogleFonts.poppins(
                           color: AppTheme.warmBeige,
                           fontSize: 14,
                         ),
                       ),
+                      Text(
+                        'Payment ID: ${order.paymentId.substring(0, 8)}...',
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.warmBeige.withValues(alpha: 0.8),
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      order['status'],
+                      'Completed',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -606,14 +725,58 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ],
               ),
             ),
-            
-            // Items List
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  Text(
+                    'Order Items',
+                    style: GoogleFonts.oswald(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.deepNavy,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warmBeige.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$totalItems items',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.deepNavy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.all(24),
-                itemCount: order['items'].length,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                itemCount: items.length,
                 itemBuilder: (context, index) {
-                  final item = order['items'][index];
+                  final item = items[index];
+                  final productName = item['product_name'] ??
+                      item['productName'] ??
+                      'Unknown Product';
+                  final productPrice =
+                      item['product_price'] ?? item['productPrice'] ?? 0;
+                  final quantity = item['quantity'] ?? 1;
+                  final itemTotal = item['total_price'] ??
+                      item['totalPrice'] ??
+                      (productPrice * quantity);
+                  final temperature = item['temperature'] ?? '';
+                  final sweetness = item['sweetness'] ?? '';
+                  final specialNotes =
+                      item['special_notes'] ?? item['specialNotes'] ?? '';
+
                   return Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(16),
@@ -630,19 +793,53 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                     child: Row(
                       children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.neutralGradient,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Center(
-                            child: Text(
-                              item['image'],
-                              style: const TextStyle(fontSize: 28),
-                            ),
-                          ),
+                        // Product image
+                        Builder(
+                          builder: (_) {
+                            final productId =
+                                item['product_id'] ?? item['productId'];
+                            final product = _productCache[productId];
+                            final imageName = product?.image;
+                            if (productId != null &&
+                                imageName != null &&
+                                imageName.isNotEmpty) {
+                              final imageUrl =
+                                  '${PocketBaseService.baseUrl}/api/files/products/$productId/$imageName';
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.network(
+                                  imageUrl,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: AppTheme.softWhite,
+                                    child: const Icon(Icons.coffee_rounded,
+                                        color: Colors.grey),
+                                  ),
+                                ),
+                              );
+                            } else {
+                              return Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  gradient: AppTheme.neutralGradient,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.coffee_rounded,
+                                    size: 28,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -650,49 +847,222 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item['name'],
+                                productName,
                                 style: GoogleFonts.poppins(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                   color: AppTheme.deepNavy,
                                 ),
                               ),
-                              Text(
-                                'Rp ${item['price']}',
-                                style: GoogleFonts.oswald(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.deepNavy,
-                                ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Rp $productPrice',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      color: AppTheme.charcoalGray,
+                                    ),
+                                  ),
+                                  Text(
+                                    ' × $quantity',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.deepNavy,
+                                    ),
+                                  ),
+                                ],
                               ),
+                              if (temperature.isNotEmpty ||
+                                  sweetness.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    if (temperature.isNotEmpty &&
+                                        temperature != '-')
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.warmBeige
+                                              .withValues(alpha: 0.3),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          temperature,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppTheme.deepNavy,
+                                          ),
+                                        ),
+                                      ),
+                                    if (sweetness.isNotEmpty &&
+                                        sweetness != '-')
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.warmBeige
+                                              .withValues(alpha: 0.3),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          sweetness,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppTheme.deepNavy,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              if (specialNotes.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.lightCream
+                                        .withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.note_rounded,
+                                        size: 14,
+                                        color: AppTheme.charcoalGray,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          specialNotes,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: AppTheme.charcoalGray,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.primaryGradient,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProductDetailScreen(product: item),
-                                ),
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.add_shopping_cart_rounded,
-                              color: Colors.white,
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Rp $itemTotal',
+                              style: GoogleFonts.oswald(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
                             ),
-                          ),
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                gradient: AppTheme.primaryGradient,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: IconButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Added $productName to favorites'),
+                                      backgroundColor: AppTheme.deepNavy,
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.favorite_border_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   );
                 },
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total Amount',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: AppTheme.lightCream,
+                          ),
+                        ),
+                        Text(
+                          'Rp $totalPrice',
+                          style: GoogleFonts.oswald(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showReorderOptions(items);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppTheme.deepNavy,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Reorder All',
+                        style: GoogleFonts.oswald(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -702,125 +1072,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _showReorderOptions(List<dynamic> items) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: const Icon(
-                Icons.refresh_rounded,
-                color: Colors.white,
-                size: 40,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Reorder Items',
-              style: GoogleFonts.oswald(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.deepNavy,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose how you want to reorder these items',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                color: AppTheme.charcoalGray,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppTheme.deepNavy, width: 2),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _reorderAllItems(items);
-                      },
-                      child: Text(
-                        'Add All to Cart',
-                        style: GoogleFonts.poppins(
-                          color: AppTheme.deepNavy,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.primaryGradient,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _selectItemsToReorder(items);
-                      },
-                      child: Text(
-                        'Select Items',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _reorderAllItems(List<dynamic> items) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'All items added to cart!',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
+        content: const Text('Reorder feature coming soon!'),
         backgroundColor: AppTheme.deepNavy,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
       ),
     );
   }
-
-  void _selectItemsToReorder(List<dynamic> items) {
-    // Navigate to first item's detail screen as an example
-    if (items.isNotEmpty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ProductDetailScreen(product: items[0]),
-        ),
-      );
-    }
-  }
+  // This is a placeholder for the reorder functionality.
+  // You can implement the actual reorder logic here.
 }

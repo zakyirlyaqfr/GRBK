@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/product_model.dart';
-import '../services/product_services.dart'; // Fixed: tambah 's' di akhir
+import '../services/product_services.dart';
 
 class ProductProvider extends ChangeNotifier {
   final ProductService _productService = ProductService();
@@ -41,6 +41,7 @@ class ProductProvider extends ChangeNotifier {
     try {
       _products = await _productService.getAllProducts();
       _error = null;
+      debugPrint('Loaded ${_products.length} products');
     } catch (e) {
       _error = e.toString();
       debugPrint('Error loading products: $e');
@@ -49,29 +50,34 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  // Create product
+  // Create product with enhanced web image support
   Future<bool> createProduct({
     required String name,
     required int price,
     required String category,
     required String description,
     File? imageFile,
+    String? webImageData, // Add this parameter
     bool stock = true,
   }) async {
     _setLoading(true);
     try {
-      // ProductService.createProduct returns ProductModel directly, not a Map
+      debugPrint('Creating product: $name');
+      debugPrint('Has image file: ${imageFile != null}');
+      debugPrint('Has web image data: ${webImageData != null && webImageData.isNotEmpty}');
+      
       await _productService.createProduct(
         name: name,
         price: price,
         category: category,
         description: description,
         imageFile: imageFile,
+        webImageData: webImageData,
       );
 
-      // If we get here without exception, it was successful
       await loadProducts(); // Reload products
       _error = null;
+      debugPrint('Product created successfully');
       return true;
     } catch (e) {
       _error = e.toString();
@@ -82,7 +88,7 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  // Update product
+  // Update product with enhanced web image support
   Future<bool> updateProduct({
     required String id,
     required String name,
@@ -90,11 +96,15 @@ class ProductProvider extends ChangeNotifier {
     required String category,
     required String description,
     File? imageFile,
+    String? webImageData, // Add this parameter
     bool? stock,
   }) async {
     _setLoading(true);
     try {
-      // ProductService.updateProduct returns ProductModel directly, not a Map
+      debugPrint('Updating product: $id');
+      debugPrint('Has image file: ${imageFile != null}');
+      debugPrint('Has web image data: ${webImageData != null && webImageData.isNotEmpty}');
+      
       await _productService.updateProduct(
         id: id,
         name: name,
@@ -102,11 +112,12 @@ class ProductProvider extends ChangeNotifier {
         category: category,
         description: description,
         imageFile: imageFile,
+        webImageData: webImageData,
       );
 
-      // If we get here without exception, it was successful
       await loadProducts(); // Reload products
       _error = null;
+      debugPrint('Product updated successfully');
       return true;
     } catch (e) {
       _error = e.toString();
@@ -146,7 +157,6 @@ class ProductProvider extends ChangeNotifier {
   Future<bool> deleteProduct(String id) async {
     _setLoading(true);
     try {
-      // ProductService.deleteProduct returns bool directly, not a Map
       final success = await _productService.deleteProduct(id);
 
       if (success) {
@@ -166,28 +176,23 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  // Get image URL - Fixed method signature
+  // Get image URL
   String getImageUrl(ProductModel product) {
     return _productService.getImageUrl(product);
   }
 
-  // Get image URL from path - NEW METHOD for cart functionality
+  // Get image URL from path
   String getImageUrlFromPath(String imagePath) {
-    // Assuming your PocketBase URL is similar to the one in CartService
-    const String baseUrl = 'http://127.0.0.1:8090'; // Replace with your PocketBase URL
+    const String baseUrl = 'http://127.0.0.1:8090';
     
-    // Check if the path already contains the full URL
     if (imagePath.startsWith('http')) {
       return imagePath;
     }
     
-    // Check if path is empty or null
     if (imagePath.isEmpty) {
       return '';
     }
     
-    // Construct the URL for the image
-    // Format: http://your-pocketbase-url/api/files/collection_name/record_id/filename
     return '$baseUrl/api/files/products/$imagePath';
   }
 

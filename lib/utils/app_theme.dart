@@ -2,47 +2,59 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Color Palette from the provided image
-  static const Color lightCream = Color(0xFFF1EFEC);      // Top band - light cream
-  static const Color warmBeige = Color(0xFFD4C9BE);       // Second band - warm beige
-  static const Color deepNavy = Color(0xFF123458);        // Third band - deep navy blue
-  static const Color richBlack = Color(0xFF030303);       // Bottom band - rich black
+  // Primary Colors
+  static const Color deepNavy = Color.from(alpha: 1, red: 0.102, green: 0.137, blue: 0.494);
+  static const Color richBlack = Color(0xFF212121);
+  static const Color charcoalGray = Color(0xFF424242);
+  static const Color lightGray = Color(0xFF9E9E9E);
+  static const Color softWhite = Color(0xFFFAFAFA);
+  static const Color lightCream = Color(0xFFF5F5DC);
+  static const Color warmBeige = Color(0xFFD7CCC8);
   
-  // Additional complementary colors for UI elements
-  static const Color softWhite = Color(0xFFFAF9F7);       // Even lighter than cream
-  static const Color mediumBeige = Color(0xFFC4B5A0);     // Darker beige variant
-  static const Color navyAccent = Color(0xFF1E4A72);      // Lighter navy for accents
-  static const Color charcoalGray = Color(0xFF2C2C2C);    // Softer than black
-  
-  // Status and accent colors
-  static const Color successGreen = Color(0xFF4CAF50);
-  static const Color warningOrange = Color(0xFFFF9800);
-  static const Color errorRed = Color(0xFFE53935);
-  static const Color infoBlue = Color(0xFF2196F3);
-  
-  // Gradient combinations using the palette
+  // Accent Colors
+  static const Color accent = Color(0xFFFF6B35);
+  static const Color secondaryAccent = Color(0xFF4CAF50);
+
+  // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [deepNavy, navyAccent],
+    colors: [deepNavy, Color(0xFF3949AB)],
   );
-  
+
   static const LinearGradient accentGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [navyAccent, deepNavy],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [accent, Color(0xFFFF8A65)],
   );
-  
+
   static const LinearGradient lightGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [softWhite, lightCream],
-  );
-  
-  static const LinearGradient neutralGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
     colors: [lightCream, warmBeige],
+  );
+
+  static const LinearGradient neutralGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [charcoalGray, lightGray],
+  );
+
+  // Text Styles
+  static const TextStyle headingStyle = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+    color: deepNavy,
+  );
+
+  static const TextStyle bodyStyle = TextStyle(
+    fontSize: 16,
+    color: charcoalGray,
+  );
+
+  static const TextStyle captionStyle = TextStyle(
+    fontSize: 12,
+    color: lightGray,
   );
   
   static ThemeData lightTheme = ThemeData(

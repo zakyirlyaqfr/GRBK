@@ -396,6 +396,69 @@ class PaymentService {
     }
   }
 
+  // Get all payments
+  Future<List<PaymentModel>> getAllPayments() async {
+    try {
+      final collectionName = await _getCorrectCollectionName();
+      final apiUrl = '${PocketBaseService.baseUrl}/api/collections/$collectionName/records?sort=-created';
+      final headers = await _getAuthHeaders();
+      final response = await http.get(Uri.parse(apiUrl), headers: headers);
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final List<dynamic> items = responseData['items'] ?? [];
+        return items.map((item) => PaymentModel.fromJson(item)).toList();
+      } else {
+        debugPrint('Error getting all payments: ${response.body}');
+        _handleApiError(response);
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Exception getting all payments: $e');
+      return [];
+    }
+  }
+
+  // Create payment (not from cart, but from provided data)
+  Future<PaymentModel?> createPayment({
+    required String userId,
+    required List<Map<String, dynamic>> items,
+    required int totalItems,
+    required int totalPrice,
+  }) async {
+    try {
+      final collectionName = await _getCorrectCollectionName();
+      final apiUrl = '${PocketBaseService.baseUrl}/api/collections/$collectionName/records';
+      final headers = await _getAuthHeaders();
+
+      final paymentData = {
+        'users_id': userId,
+        'total_price': totalPrice,
+        'total_items': totalItems,
+        'status': false,
+        'items': items,
+      };
+
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: headers,
+        body: jsonEncode(paymentData),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return PaymentModel.fromJson(responseData);
+      } else {
+        debugPrint('Error creating payment: ${response.body}');
+        _handleApiError(response);
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Exception creating payment: $e');
+      return null;
+    }
+  }
+
   // Test connection to PocketBase
   Future<bool> testConnection() async {
     try {
@@ -488,79 +551,6 @@ class PaymentService {
     } catch (e) {
       debugPrint('Exception creating multi-user payments: $e');
       return [];
-    }
-  }
-
-  // Get cart items by payment ID (for debugging/verification)
-  Future<List<CartModel>> getCartItemsByPaymentId(String paymentId) async {
-    try {
-      debugPrint('Getting cart items for payment: $paymentId');
-      
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(payment_id="$paymentId")&expand=products_id'),
-        headers: headers,
-      );
-      
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final List<dynamic> items = responseData['items'] ?? [];
-        return items.map((item) => CartModel.fromJson(item)).toList();
-      } else {
-        debugPrint('Error getting cart items by payment ID: ${response.body}');
-        return [];
-      }
-    } catch (e) {
-      debugPrint('Exception getting cart items by payment ID: $e');
-      return [];
-    }
-  }
-
-  // Clear all cart items for a specific user (alternative method)
-  Future<bool> clearCartForUser(String userId) async {
-    try {
-      debugPrint('Clearing all cart items for user: $userId');
-      
-      final headers = await _getAuthHeaders();
-      
-      // Get all cart items for the user
-      final getResponse = await http.get(
-        Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(users_id="$userId")'),
-        headers: headers,
-      );
-      
-      if (getResponse.statusCode == 200) {
-        final responseData = jsonDecode(getResponse.body);
-        final List<dynamic> cartItems = responseData['items'] ?? [];
-        
-        debugPrint('Found ${cartItems.length} cart items to delete for user $userId');
-        
-        // Delete each cart item
-        int deletedCount = 0;
-        for (final item in cartItems) {
-          final itemId = item['id'];
-          final deleteResponse = await http.delete(
-            Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records/$itemId'),
-            headers: headers,
-          );
-          
-          if (deleteResponse.statusCode == 204) {
-            deletedCount++;
-            debugPrint('✅ Deleted cart item: $itemId');
-          } else {
-            debugPrint('❌ Failed to delete cart item $itemId: ${deleteResponse.body}');
-          }
-        }
-        
-        debugPrint('Successfully deleted $deletedCount out of ${cartItems.length} cart items');
-        return deletedCount == cartItems.length;
-      } else {
-        debugPrint('Error getting cart items for user: ${getResponse.body}');
-        return false;
-      }
-    } catch (e) {
-      debugPrint('Exception clearing cart for user: $e');
-      return false;
     }
   }
 }

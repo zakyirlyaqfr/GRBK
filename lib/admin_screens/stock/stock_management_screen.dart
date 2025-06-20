@@ -21,7 +21,6 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
     'Basic Espresso',
     'Sparkling Fruity',
     'Milk Base',
-    'Tea Series',
     'Food'
   ];
 
@@ -289,6 +288,9 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
 
   Widget _buildProductsGrid(ProductProvider productProvider) {
     final filteredProducts = _getFilteredProducts(productProvider.products);
+
+    // Sort products alphabetically by name (A-Z)
+    filteredProducts.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     if (filteredProducts.isEmpty) {
       return Center(

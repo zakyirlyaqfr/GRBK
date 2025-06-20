@@ -27,7 +27,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     'Basic Espresso',
     'Sparkling Fruity',
     'Milk Base',
-    'Tea Series',
     'Food'
   ];
 
@@ -694,9 +693,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     }
   }
 
-  // Updated image picker method with web support
-  // ignore: unused_element
-  Future<void> _pickImage(Function(File?) onImageSelected) async {
+  // Updated image picker method with improved web support
+  Future<void> _pickImageForDialog(Function(File?, String?) onImageSelected) async {
     try {
       if (kIsWeb) {
         // Web platform - use HTML file input
@@ -711,11 +709,16 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             final reader = html.FileReader();
             
             reader.onLoadEnd.listen((e) {
-              // For web, we'll pass null as File and handle the data differently
-              // You might want to create a custom class to handle web files
-              onImageSelected(null);
-              // Store the file data for web upload
-              _handleWebImageFile(file, reader.result as String);
+              final result = reader.result as String;
+              debugPrint('Web image selected: ${file.name}');
+              debugPrint('Data URL length: ${result.length}');
+              debugPrint('Data URL preview: ${result.substring(0, 50)}...');
+              onImageSelected(null, result);
+            });
+            
+            reader.onError.listen((e) {
+              debugPrint('Error reading file: $e');
+              _showErrorSnackBar('Gagal membaca file gambar');
             });
             
             reader.readAsDataUrl(file);
@@ -731,19 +734,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         );
         
         if (image != null) {
-          onImageSelected(File(image.path));
+          debugPrint('Mobile image selected: ${image.path}');
+          onImageSelected(File(image.path), null);
         }
       }
     } catch (e) {
+      debugPrint('Error picking image: $e');
       _showErrorSnackBar('Gagal memilih gambar: $e');
     }
-  }
-
-  // Handle web image file data
-  void _handleWebImageFile(html.File file, String dataUrl) {
-    // Store the web file data for later use
-    // You can implement this based on your needs
-    debugPrint('Web image selected: ${file.name}, size: ${file.size}');
   }
 
   void _showAddMenuDialog() {
@@ -752,7 +750,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     final descriptionController = TextEditingController();
     String selectedCategory = 'Kopi Susu';
     File? selectedImageFile;
-    String? webImageData; // For web platform
+    String? webImageData;
 
     showDialog(
       context: context,
@@ -847,6 +845,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                       ? Image.network(
                                           webImageData!,
                                           fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            debugPrint('Error loading web image: $error');
+                                            return const Icon(
+                                              Icons.image_rounded,
+                                              size: 40,
+                                              color: AppTheme.charcoalGray,
+                                            );
+                                          },
                                         )
                                       : const Icon(
                                           Icons.image_rounded,
@@ -858,6 +864,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
                                 onPressed: () => _pickImageForDialog((file, webData) {
+                                  debugPrint('Image picked - File: ${file?.path}, WebData length: ${webData?.length}');
                                   setDialogState(() {
                                     selectedImageFile = file;
                                     webImageData = webData;
@@ -961,12 +968,26 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             onPressed: productProvider.isLoading ? null : () async {
                               if (nameController.text.isNotEmpty && 
                                   priceController.text.isNotEmpty) {
+                                
+                                debugPrint('=== CREATING PRODUCT ===');
+                                debugPrint('Name: ${nameController.text}');
+                                debugPrint('Price: ${priceController.text}');
+                                debugPrint('Category: $selectedCategory');
+                                debugPrint('Description: ${descriptionController.text}');
+                                debugPrint('Has image file: ${selectedImageFile != null}');
+                                debugPrint('Has web image data: ${webImageData != null && webImageData!.isNotEmpty}');
+                                if (webImageData != null) {
+                                  debugPrint('Web image data length: ${webImageData!.length}');
+                                  debugPrint('Web image data preview: ${webImageData!.substring(0, 50)}...');
+                                }
+                                
                                 final success = await productProvider.createProduct(
                                   name: nameController.text,
                                   price: int.tryParse(priceController.text) ?? 0,
                                   category: selectedCategory,
                                   description: descriptionController.text,
                                   imageFile: selectedImageFile,
+                                  webImageData: webImageData, // IMPORTANT: Pass webImageData
                                 );
                                 
                                 if (success) {
@@ -1015,46 +1036,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         ),
       ),
     );
-  }
-
-  // Updated image picker for dialog with web support
-  Future<void> _pickImageForDialog(Function(File?, String?) onImageSelected) async {
-    try {
-      if (kIsWeb) {
-        // Web platform - use HTML file input
-        final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
-        uploadInput.accept = 'image/*';
-        uploadInput.click();
-
-        uploadInput.onChange.listen((e) {
-          final files = uploadInput.files;
-          if (files!.isNotEmpty) {
-            final file = files[0];
-            final reader = html.FileReader();
-            
-            reader.onLoadEnd.listen((e) {
-              onImageSelected(null, reader.result as String);
-            });
-            
-            reader.readAsDataUrl(file);
-          }
-        });
-      } else {
-        // Mobile/Desktop platform - use ImagePicker
-        final XFile? image = await _imagePicker.pickImage(
-          source: ImageSource.gallery,
-          maxWidth: 800,
-          maxHeight: 800,
-          imageQuality: 80,
-        );
-        
-        if (image != null) {
-          onImageSelected(File(image.path), null);
-        }
-      }
-    } catch (e) {
-      _showErrorSnackBar('Gagal memilih gambar: $e');
-    }
   }
 
   void _showEditMenuDialog(ProductModel product) {
@@ -1158,6 +1139,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                       ? Image.network(
                                           webImageData!,
                                           fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return const Icon(
+                                              Icons.image_rounded,
+                                              size: 40,
+                                              color: AppTheme.charcoalGray,
+                                            );
+                                          },
                                         )
                                       : (product.image != null && product.image!.isNotEmpty
                                           ? Image.network(
@@ -1284,6 +1272,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             onPressed: productProvider.isLoading ? null : () async {
                               if (nameController.text.isNotEmpty && 
                                   priceController.text.isNotEmpty) {
+                                
+                                debugPrint('=== UPDATING PRODUCT ===');
+                                debugPrint('ID: ${product.id}');
+                                debugPrint('Name: ${nameController.text}');
+                                debugPrint('Has image file: ${selectedImageFile != null}');
+                                debugPrint('Has web image data: ${webImageData != null && webImageData!.isNotEmpty}');
+                                
                                 final success = await productProvider.updateProduct(
                                   id: product.id,
                                   name: nameController.text,
@@ -1291,6 +1286,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                   category: selectedCategory,
                                   description: descriptionController.text,
                                   imageFile: selectedImageFile,
+                                  webImageData: webImageData, // IMPORTANT: Pass webImageData
                                 );
                                 
                                 if (success) {

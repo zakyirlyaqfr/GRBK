@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../models/cart_model.dart';
 import '../services/cart_service.dart';
 import '../services/pocketbase_service.dart';
@@ -9,7 +8,6 @@ class CartProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
-  // Get PocketBase service instance
   final PocketBaseService _pocketBaseService = PocketBaseService();
 
   List<CartModel> get cartItems => _cartItems;
@@ -18,9 +16,8 @@ class CartProvider with ChangeNotifier {
 
   int get totalItems => _cartItems.fold(0, (sum, item) => sum + item.quantity);
   
-  int get totalPrice => _cartItems.fold(0, (sum, item) => sum + item.totalPrice);
+  double get totalCartValue => _cartItems.fold(0.0, (sum, item) => sum + item.totalPrice);
 
-  // Check if user is authenticated
   bool get isAuthenticated => _pocketBaseService.isAuthenticated;
 
   // Load cart items from PocketBase
@@ -74,13 +71,26 @@ class CartProvider with ChangeNotifier {
         specialNotes: specialNotes,
       );
 
-      // Reload cart items to get updated data
       await loadCartItems();
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // Increase quantity
+  Future<void> increaseQuantity(CartModel cartItem) async {
+    await updateCartItemQuantity(cartItem.id, cartItem.quantity + 1);
+  }
+
+  // Decrease quantity
+  Future<void> decreaseQuantity(CartModel cartItem) async {
+    if (cartItem.quantity > 1) {
+      await updateCartItemQuantity(cartItem.id, cartItem.quantity - 1);
+    } else {
+      await removeFromCart(cartItem.id);
     }
   }
 
@@ -104,10 +114,10 @@ class CartProvider with ChangeNotifier {
     try {
       await CartService.updateCartItem(cartId, newQuantity);
       
-      // Update local state
       final index = _cartItems.indexWhere((item) => item.id == cartId);
       if (index != -1) {
-        _cartItems[index] = _cartItems[index].copyWith(quantity: newQuantity);
+        final updatedItem = _cartItems[index].copyWith(quantity: newQuantity);
+        _cartItems[index] = updatedItem;
       }
     } catch (e) {
       _error = e.toString();
@@ -131,8 +141,6 @@ class CartProvider with ChangeNotifier {
 
     try {
       await CartService.removeFromCart(cartId);
-      
-      // Update local state
       _cartItems.removeWhere((item) => item.id == cartId);
     } catch (e) {
       _error = e.toString();
@@ -165,12 +173,31 @@ class CartProvider with ChangeNotifier {
     }
   }
 
+  // Clear cart for payment
+  Future<void> clearCartForPayment(String userId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await CartService.clearCartForUser(userId);
+      _cartItems.clear();
+      
+      debugPrint('✅ Cart cleared for user: $userId');
+    } catch (e) {
+      debugPrint('❌ Error clearing cart: $e');
+      _error = 'Failed to clear cart';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Get cart item count for a specific product
   Future<int> getProductQuantityInCart(String productId) async {
     try {
       return await CartService.getProductQuantityInCart(productId);
     } catch (e) {
-      print('Error getting product quantity in cart: $e');
+      debugPrint('Error getting product quantity in cart: $e');
       return 0;
     }
   }
@@ -180,33 +207,4 @@ class CartProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
   }
-
-  Future<void> clearCartForPayment(String userId) async {
-  try {
-    _isLoading = true;
-    notifyListeners();
-
-    // Clear all cart items for the user
-    final response = await http.delete(
-      Uri.parse('${PocketBaseService.baseUrl}/api/collections/cart/records?filter=(users_id="$userId")'),
-      headers: {
-        'Content-Type': 'application/json',
-        if ((_pocketBaseService.authToken ?? '').isNotEmpty)
-          'Authorization': 'Bearer ${_pocketBaseService.authToken}',
-      },
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 204) {
-      _cartItems.clear();
-      notifyListeners();
-    } else {
-      debugPrint('Error clearing cart: ${response.body}');
-    }
-  } catch (e) {
-    debugPrint('Error clearing cart: $e');
-  } finally {
-    _isLoading = false;
-    notifyListeners();
-  }
-}
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../models/payment_model.dart';
 import '../models/cart_model.dart';
 import '../services/payment_service.dart';
@@ -13,8 +13,61 @@ class PaymentProvider with ChangeNotifier {
   List<PaymentModel> get payments => _payments;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  // Load all payments
+  Future<void> loadAllPayments() async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      final payments = await _paymentService.getAllPayments();
+      _payments = payments;
+      
+      debugPrint('✅ Loaded ${payments.length} total payments');
+    } catch (e) {
+      _setError('Error loading all payments: $e');
+      debugPrint('❌ Error in loadAllPayments: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // Create payment
+  Future<PaymentModel?> createPayment({
+    required String userId,
+    required List<Map<String, dynamic>> items,
+    required int totalItems,
+    required double totalPrice,
+  }) async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      final payment = await _paymentService.createPayment(
+        userId: userId,
+        items: items,
+        totalItems: totalItems,
+        totalPrice: totalPrice.toInt(),
+      );
+
+      if (payment != null) {
+        _payments.insert(0, payment);
+        debugPrint('✅ Payment created successfully: ${payment.id}');
+      } else {
+        _setError('Failed to create payment');
+      }
+
+      return payment;
+    } catch (e) {
+      _setError('Error creating payment: $e');
+      debugPrint('❌ Error in createPayment: $e');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
   
-  // Create payment from cart items (updated to not require userId parameter)
+  // Create payment from cart items
   Future<PaymentModel?> createPaymentFromCart({
     required List<CartModel> cartItems,
   }) async {
@@ -24,13 +77,11 @@ class PaymentProvider with ChangeNotifier {
       
       debugPrint('PaymentProvider: Creating payment from ${cartItems.length} cart items');
       
-      // Validate cart items have user IDs
       if (cartItems.isEmpty) {
         _setError('Cannot create payment with empty cart');
         return null;
       }
       
-      // Check if all items belong to the same user
       final userIds = cartItems.map((item) => item.usersId).toSet();
       if (userIds.isEmpty) {
         _setError('Cart items missing user IDs');
@@ -51,7 +102,7 @@ class PaymentProvider with ChangeNotifier {
       );
       
       if (payment != null) {
-        _payments.insert(0, payment); // Add to beginning of list
+        _payments.insert(0, payment);
         notifyListeners();
         debugPrint('PaymentProvider: Payment created successfully with ID ${payment.id}');
       } else {
@@ -68,38 +119,6 @@ class PaymentProvider with ChangeNotifier {
     }
   }
   
-  // Create multiple payments for multi-user cart
-  Future<List<PaymentModel>> createPaymentsFromMultiUserCart({
-    required List<CartModel> cartItems,
-  }) async {
-    try {
-      _setLoading(true);
-      _clearError();
-      
-      debugPrint('PaymentProvider: Creating payments for multi-user cart');
-      
-      final payments = await _paymentService.createPaymentsFromMultiUserCart(
-        cartItems: cartItems,
-      );
-      
-      if (payments.isNotEmpty) {
-        _payments.insertAll(0, payments); // Add to beginning of list
-        notifyListeners();
-        debugPrint('PaymentProvider: Created ${payments.length} payments');
-      } else {
-        _setError('Failed to create any payments');
-      }
-      
-      return payments;
-    } catch (e) {
-      debugPrint('PaymentProvider error creating multi-user payments: $e');
-      _setError('Error creating payments: $e');
-      return [];
-    } finally {
-      _setLoading(false);
-    }
-  }
-  
   // Get payment by ID
   Future<PaymentModel?> getPaymentById(String paymentId) async {
     try {
@@ -108,7 +127,6 @@ class PaymentProvider with ChangeNotifier {
       final payment = await _paymentService.getPaymentById(paymentId);
       
       if (payment != null) {
-        // Update local list if payment exists
         final index = _payments.indexWhere((p) => p.id == paymentId);
         if (index != -1) {
           _payments[index] = payment;
@@ -123,7 +141,7 @@ class PaymentProvider with ChangeNotifier {
     }
   }
   
-  // Update payment status - now accepts boolean
+  // Update payment status
   Future<bool> updatePaymentStatus(String paymentId, bool status) async {
     try {
       debugPrint('PaymentProvider: Updating payment $paymentId status to $status');
@@ -131,7 +149,6 @@ class PaymentProvider with ChangeNotifier {
       final success = await _paymentService.updatePaymentStatus(paymentId, status);
       
       if (success) {
-        // Update local payment status
         final index = _payments.indexWhere((p) => p.id == paymentId);
         if (index != -1) {
           final updatedPayment = PaymentModel(
@@ -140,7 +157,7 @@ class PaymentProvider with ChangeNotifier {
             userName: _payments[index].userName,
             totalPrice: _payments[index].totalPrice,
             totalItems: _payments[index].totalItems,
-            status: status, // Boolean value
+            status: status,
             items: _payments[index].items,
             created: _payments[index].created,
             updated: DateTime.now(),
@@ -149,7 +166,6 @@ class PaymentProvider with ChangeNotifier {
           notifyListeners();
         }
         
-        // If payment is confirmed (status = true), clear cart items
         if (status == true) {
           debugPrint('Payment confirmed, clearing cart items...');
           await _paymentService.clearCartForPayment(paymentId);

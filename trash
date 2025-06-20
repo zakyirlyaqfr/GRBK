@@ -1,291 +1,471 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import '../auth/login_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:async';
 import '../../utils/app_theme.dart';
+import '../../user_screens/home/home_screen.dart';
+import '../../providers/cart_provider.dart';
+import '../../providers/product_provider.dart';
+import '../../providers/payment_provider.dart';
+import '../../models/payment_model.dart';
+import '../../utils/pocketbase_debug.dart';
+import '../../services/payment_service.dart';
 
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+class CartScreen extends StatefulWidget {
+  const CartScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<CartScreen> createState() => _CartScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
-  final Map<String, dynamic> _userProfile = {
-    'name': 'John Doe',
-    'email': 'john.doe@email.com',
-    'joinDate': 'January 2024',
-    'totalOrders': 24,
-    'profileImage': null,
-  };
+class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  
+  // ignore: unused_field
+  PaymentModel? _currentPayment;
+  bool _isPaymentConfirmed = false;
+  Timer? _paymentStatusTimer;
+  bool _isCartClearing = false;
+  
+  // Add this line
+  StateSetter? _dialogSetState;
 
-  final Map<String, bool> _notificationSettings = {
-    'orderUpdates': true,
-    'promotions': true,
-    'newMenu': false,
-    'weeklyDigest': true,
-  };
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    _animationController.forward();
 
-  File? _profileImage;
-  final ImagePicker _picker = ImagePicker();
+    // Load cart items when screen initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CartProvider>().loadCartItems();
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _paymentStatusTimer?.cancel();
+    super.dispose();
+  }
+
+  // Generate QR code data with payment ID
+  String _generatePaymentQRData(String paymentId) {
+    return paymentId; // Simple QR code with just the payment ID
+  }
+
+  // Check payment status periodically and clear cart when confirmed
+  void _startPaymentStatusCheck(String paymentId) {
+    _paymentStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      final paymentProvider = context.read<PaymentProvider>();
+      final payment = await paymentProvider.getPaymentById(paymentId);
+      
+      if (payment != null && payment.isConfirmed) {
+        timer.cancel();
+        if (mounted) {
+          debugPrint('Payment confirmed! Clearing cart from database...');
+          
+          // Clear cart from database when payment is confirmed
+          await _clearCartFromDatabase(payment.userId);
+          
+          setState(() {
+            _isPaymentConfirmed = true;
+            _currentPayment = payment;
+          });
+        
+          // Update dialog state if it's still open
+          if (_dialogSetState != null) {
+            _dialogSetState!(() {
+              _isPaymentConfirmed = true;
+              _currentPayment = payment;
+            });
+          }
+        
+          _showPaymentConfirmedAnimation();
+        }
+      }
+    });
+  }
+
+  // Clear cart items from database for the specific user
+  Future<void> _clearCartFromDatabase(String userId) async {
+    try {
+      setState(() {
+        _isCartClearing = true;
+      });
+    
+      // Update dialog state if it's open
+      if (_dialogSetState != null) {
+        _dialogSetState!(() {
+          _isCartClearing = true;
+        });
+      }
+
+      final cartProvider = context.read<CartProvider>();
+      
+      debugPrint('Clearing cart from database for user: $userId');
+      
+      // Use the CartProvider method to clear cart for the specific user
+      await cartProvider.clearCartForPayment(userId);
+      
+      debugPrint('✅ Cart cleared successfully from database');
+      
+    } catch (e) {
+      debugPrint('❌ Error clearing cart from database: $e');
+      // Show error but don't prevent the payment confirmation flow
+      if (mounted) {
+        _showErrorSnackBar('Cart cleared locally but may need manual cleanup in database');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCartClearing = false;
+        });
+      
+        // Update dialog state if it's open
+        if (_dialogSetState != null) {
+          _dialogSetState!(() {
+            _isCartClearing = false;
+          });
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.softWhite,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Enhanced Profile Header
-              _buildEnhancedHeader(),
-              
-              const SizedBox(height: 32),
-              
-              // Profile Menu Items
-              _buildMenuItems(),
-              
-              const SizedBox(height: 32),
-              
-              // Logout Button
-              _buildLogoutButton(),
-              
-              const SizedBox(height: 20),
-            ],
-          ),
+        child: Column(
+          children: [
+            // Enhanced Header
+            _buildEnhancedHeader(),
+            
+            // Content
+            Expanded(
+              child: Consumer<CartProvider>(
+                builder: (context, cartProvider, child) {
+                  if (cartProvider.isLoading) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
+
+                  if (cartProvider.error != null) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: Colors.red.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Error loading cart',
+                            style: GoogleFonts.oswald(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            cartProvider.error!,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              color: AppTheme.charcoalGray,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: () => cartProvider.loadCartItems(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return cartProvider.cartItems.isEmpty 
+                      ? _buildEmptyCart() 
+                      : _buildCartContent();
+                },
+              ),
+            ),
+          ],
         ),
+      ),
+      bottomNavigationBar: Consumer<CartProvider>(
+        builder: (context, cartProvider, child) {
+          return cartProvider.cartItems.isNotEmpty && !cartProvider.isLoading
+              ? _buildEnhancedBottomBar()
+              : const SizedBox.shrink();
+        },
       ),
     );
   }
 
   Widget _buildEnhancedHeader() {
     return Container(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
         gradient: AppTheme.primaryGradient,
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(40),
-          bottomRight: Radius.circular(40),
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
         ),
       ),
       child: Column(
         children: [
-          // Profile Avatar with Upload
-          GestureDetector(
-            onTap: _showImagePickerOptions,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(60),
-                border: Border.all(
-                  color: AppTheme.lightCream,
-                  width: 4,
+          Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.richBlack.withValues(alpha: 0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
+                child: IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_rounded,
+                    color: Colors.white,
                   ),
-                ],
+                ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(56),
-                child: _profileImage != null
-                    ? Image.file(
-                        _profileImage!,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        decoration: const BoxDecoration(
-                          gradient: AppTheme.lightGradient,
-                        ),
-                        child: const Icon(
-                          Icons.person_rounded,
-                          size: 60,
-                          color: AppTheme.deepNavy,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'My Cart',
+                      style: GoogleFonts.oswald(
+                        color: AppTheme.lightCream,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    Consumer<CartProvider>(
+                      builder: (context, cartProvider, child) {
+                        if (cartProvider.cartItems.isNotEmpty) {
+                          return Text(
+                            '${cartProvider.totalItems} items • Rp ${cartProvider.totalPrice}',
+                            style: GoogleFonts.poppins(
+                              color: AppTheme.warmBeige,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Consumer<CartProvider>(
+                builder: (context, cartProvider, child) {
+                  if (cartProvider.cartItems.isNotEmpty) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        onPressed: _showClearCartDialog,
+                        icon: const Icon(
+                          Icons.delete_sweep_rounded,
+                          color: Colors.white,
                         ),
                       ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
               ),
-            ),
+            ],
           ),
-          
-          // Camera Icon Overlay
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                gradient: AppTheme.accentGradient,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: AppTheme.lightCream,
-                  width: 2,
-                ),
-              ),
-              child: const Icon(
-                Icons.camera_alt_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // User Info
-          Text(
-            _userProfile['name'],
-            style: GoogleFonts.oswald(
-              color: AppTheme.lightCream,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
-          
-          const SizedBox(height: 4),
-          
-          Text(
-            _userProfile['email'],
-            style: GoogleFonts.poppins(
-              color: AppTheme.warmBeige,
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Enhanced Stats Row
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyCart() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildStatItem('Total Orders', '${_userProfile['totalOrders']}', Icons.shopping_bag_rounded),
+                // Animated Coffee Cup
                 Container(
-                  width: 1,
-                  height: 40,
+                  width: 160,
+                  height: 160,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        AppTheme.lightCream.withValues(alpha: 0.5),
-                        Colors.transparent,
+                    gradient: AppTheme.lightGradient,
+                    borderRadius: BorderRadius.circular(80),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                        blurRadius: 30,
+                        offset: const Offset(0, 15),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.shopping_cart_outlined,
+                      size: 50,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 32),
+                
+                // Title
+                ShaderMask(
+                  shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
+                  child: Text(
+                    'Your cart is empty',
+                    style: GoogleFonts.oswald(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Subtitle
+                Text(
+                  'Discover our amazing coffee collection\nand add your favorites to get started!',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: AppTheme.charcoalGray,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                
+                const SizedBox(height: 40),
+                
+                // Action Button
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.deepNavy.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.local_cafe_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Start Shopping',
+                          style: GoogleFonts.oswald(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                _buildStatItem('Member Since', _userProfile['joinDate'], Icons.calendar_today_rounded),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            icon,
-            color: AppTheme.lightCream,
-            size: 20,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: GoogleFonts.oswald(
-            color: AppTheme.lightCream,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            color: AppTheme.warmBeige,
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMenuItems() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          _buildEnhancedMenuItem(
-            Icons.person_outline_rounded,
-            'Personal Information',
-            'Update your profile details',
-            AppTheme.primaryGradient,
-            () => _showEditProfileDialog(),
-          ),
-          _buildEnhancedMenuItem(
-            Icons.notifications_outlined,
-            'Notifications',
-            'Manage your notification preferences',
-            AppTheme.accentGradient,
-            () => _showNotificationSettings(),
-          ),
-          _buildEnhancedMenuItem(
-            Icons.help_outline_rounded,
-            'Help & Support',
-            'Get help and contact support',
-            AppTheme.neutralGradient,
-            () => _showHelpDialog(),
-          ),
-          _buildEnhancedMenuItem(
-            Icons.info_outline_rounded,
-            'About GRBK',
-            'Learn more about our coffee shop',
-            AppTheme.lightGradient,
-            () => _showAboutDialog(),
-          ),
-        ],
+  Widget _buildCartContent() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Consumer<CartProvider>(
+        builder: (context, cartProvider, child) {
+          return ListView.builder(
+            padding: const EdgeInsets.all(24),
+            itemCount: cartProvider.cartItems.length,
+            itemBuilder: (context, index) {
+              final item = cartProvider.cartItems[index];
+              return _buildEnhancedCartItem(item, index);
+            },
+          );
+        },
       ),
     );
   }
 
-  Widget _buildEnhancedMenuItem(
-    IconData icon,
-    String title,
-    String subtitle,
-    LinearGradient gradient,
-    VoidCallback onTap,
-  ) {
+  Widget _buildEnhancedCartItem(item, int index) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: AppTheme.deepNavy.withValues(alpha: 0.08),
@@ -298,325 +478,228 @@ class _ProfileScreenState extends State<ProfileScreen> {
         margin: EdgeInsets.zero,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: gradient,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: AppTheme.deepNavy,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  // Product Image
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.neutralGradient,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                         ),
+                      ],
+                    ),
+                    child: item.productImage != null && item.productImage!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.network(
+                              context.read<ProductProvider>().getImageUrlFromPath(item.productImage!),
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Icon(
+                                    Icons.coffee_rounded,
+                                    size: 36,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.coffee_rounded,
+                              size: 36,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                  
+                  const SizedBox(width: 16),
+                  
+                  // Product Details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.productName ?? 'Unknown Product',
+                          style: GoogleFonts.oswald(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.deepNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        // Temperature & Sweetness
+                        if (item.temperature.isNotEmpty && item.temperature != '-')
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              _buildInfoChip(item.temperature, Icons.thermostat_rounded),
+                              if (item.sweetness.isNotEmpty && item.sweetness != '-')
+                                _buildInfoChip(item.sweetness, Icons.favorite_rounded),
+                            ],
+                          ),
+                        
+                        const SizedBox(height: 8),
+                        
+                        // Special Notes
+                        if (item.specialNotes.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.softWhite,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.note_rounded,
+                                  size: 14,
+                                  color: AppTheme.charcoalGray,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    item.specialNotes,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: AppTheme.charcoalGray,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        
+                        const SizedBox(height: 12),
+                        
+                        // Price
+                        Text(
+                          'Rp ${item.productPrice ?? 0}',
+                          style: GoogleFonts.oswald(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.deepNavy,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Quantity Controls & Actions
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Quantity Controls
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.lightGradient,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildQuantityButton(
+                          Icons.remove_rounded,
+                          () {
+                            context.read<CartProvider>().updateCartItemQuantity(
+                              item.id, 
+                              item.quantity - 1
+                            );
+                          },
+                        ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${item.quantity}',
+                            style: GoogleFonts.oswald(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                        ),
+                        _buildQuantityButton(
+                          Icons.add_rounded,
+                          () {
+                            context.read<CartProvider>().updateCartItemQuantity(
+                              item.id, 
+                              item.quantity + 1
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Total Price & Remove
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Total',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppTheme.charcoalGray,
+                            ),
+                          ),
+                          Text(
+                            'Rp ${item.totalPrice}',
+                            style: GoogleFonts.oswald(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppTheme.charcoalGray,
+                      const SizedBox(width: 16),
+                      GestureDetector(
+                        onTap: () => _removeItem(item.id),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.red,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.softWhite,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 16,
-                    color: AppTheme.charcoalGray,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLogoutButton() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.red.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 56,
-        child: ElevatedButton(
-          onPressed: () => _showLogoutDialog(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            elevation: 0,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.logout_rounded, size: 24),
-              const SizedBox(width: 12),
-              Text(
-                'Logout',
-                style: GoogleFonts.oswald(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showImagePickerOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.warmBeige,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            Text(
-              'Update Profile Photo',
-              style: GoogleFonts.oswald(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.deepNavy,
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: _buildImageOption(
-                    Icons.camera_alt_rounded,
-                    'Camera',
-                    AppTheme.primaryGradient,
-                    () => _pickImage(ImageSource.camera),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildImageOption(
-                    Icons.photo_library_rounded,
-                    'Gallery',
-                    AppTheme.accentGradient,
-                    () => _pickImage(ImageSource.gallery),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImageOption(IconData icon, String label, LinearGradient gradient, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.white, size: 32),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    Navigator.pop(context);
-    try {
-      final XFile? image = await _picker.pickImage(source: source);
-      if (image != null) {
-        setState(() {
-          _profileImage = File(image.path);
-        });
-        _showSuccessSnackBar('Profile photo updated successfully!');
-      }
-    } catch (e) {
-      _showErrorSnackBar('Failed to pick image. Please try again.');
-    }
-  }
-
-  void _showEditProfileDialog() {
-    final nameController = TextEditingController(text: _userProfile['name']);
-    final emailController = TextEditingController(text: _userProfile['email']);
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: AppTheme.lightGradient,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: const Icon(
-                  Icons.edit_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'Edit Profile',
-                style: GoogleFonts.oswald(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepNavy,
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Form Fields
-              _buildEnhancedTextField(
-                controller: nameController,
-                label: 'Full Name',
-                icon: Icons.person_outline_rounded,
-              ),
-              const SizedBox(height: 16),
-              _buildEnhancedTextField(
-                controller: emailController,
-                label: 'Email Address',
-                icon: Icons.email_outlined,
-              ),
-              const SizedBox(height: 24),
-              
-              // Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppTheme.deepNavy, width: 2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'Cancel',
-                          style: GoogleFonts.poppins(
-                            color: AppTheme.deepNavy,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.primaryGradient,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _userProfile['name'] = nameController.text;
-                            _userProfile['email'] = emailController.text;
-                          });
-                          Navigator.pop(context);
-                          _showSuccessSnackBar('Profile updated successfully!');
-                        },
-                        child: Text(
-                          'Save Changes',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -627,294 +710,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildEnhancedTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-  }) {
+  Widget _buildInfoChip(String text, IconData icon) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.deepNavy.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        style: GoogleFonts.poppins(
-          color: AppTheme.deepNavy,
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.poppins(
-            color: AppTheme.charcoalGray,
-          ),
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: AppTheme.primaryGradient,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: Colors.white, size: 20),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-      ),
-    );
-  }
-
-  void _showNotificationSettings() {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: AppTheme.lightGradient,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.accentGradient,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: const Icon(
-                  Icons.notifications_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'Notification Settings',
-                style: GoogleFonts.oswald(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepNavy,
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Notification Options
-              ..._notificationSettings.entries.map((entry) => 
-                _buildNotificationTile(entry.key, entry.value)
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // Save Button
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _showSuccessSnackBar('Notification settings updated!');
-                  },
-                  child: Text(
-                    'Save Settings',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotificationTile(String key, bool value) {
-    final titles = {
-      'orderUpdates': 'Order Updates',
-      'promotions': 'Promotions & Offers',
-      'newMenu': 'New Menu Items',
-      'weeklyDigest': 'Weekly Digest',
-    };
-
-    final descriptions = {
-      'orderUpdates': 'Get notified about your order status',
-      'promotions': 'Receive special offers and discounts',
-      'newMenu': 'Be first to know about new items',
-      'weeklyDigest': 'Weekly summary of your activity',
-    };
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.deepNavy.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titles[key] ?? key,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.deepNavy,
-                  ),
-                ),
-                Text(
-                  descriptions[key] ?? '',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: AppTheme.charcoalGray,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: (newValue) {
-              setState(() {
-                _notificationSettings[key] = newValue;
-              });
-            },
-            activeColor: AppTheme.deepNavy,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: AppTheme.lightGradient,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.neutralGradient,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: const Icon(
-                  Icons.help_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'Help & Support',
-                style: GoogleFonts.oswald(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepNavy,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'Need help? Contact us:',
-                style: GoogleFonts.poppins(
-                  color: AppTheme.charcoalGray,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 20),
-              
-              _buildContactItem(Icons.phone_rounded, '+62 21 1234 5678'),
-              _buildContactItem(Icons.email_rounded, 'support@grbk.coffee'),
-              _buildContactItem(Icons.schedule_rounded, 'Mon-Sun: 7AM - 10PM'),
-              
-              const SizedBox(height: 24),
-              
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    'Close',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContactItem(IconData icon, String text) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: AppTheme.accentGradient,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 20, color: AppTheme.deepNavy),
-          const SizedBox(width: 12),
+          Icon(icon, size: 12, color: Colors.white),
+          const SizedBox(width: 4),
           Text(
             text,
             style: GoogleFonts.poppins(
-              color: AppTheme.deepNavy,
-              fontWeight: FontWeight.w500,
+              fontSize: 10,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -922,100 +735,186 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+  Widget _buildQuantityButton(IconData icon, VoidCallback onPressed) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          gradient: AppTheme.primaryGradient,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.deepNavy.withValues(alpha: 0.2),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: AppTheme.lightGradient,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(40),
-                  child: Image.asset(
-                    'assets/images/grbk_logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.local_cafe_rounded,
-                        color: Colors.white,
-                        size: 40,
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'GRBK Coffee Shop',
-                style: GoogleFonts.oswald(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepNavy,
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              Text(
-                'Your specialty coffee experience since 2024. We serve premium coffee with a unique atmosphere that makes every sip memorable.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  color: AppTheme.charcoalGray,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'Version 1.0.0',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: AppTheme.charcoalGray,
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    'Close',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: 20,
         ),
       ),
     );
   }
 
-  void _showLogoutDialog() {
+  Widget _buildEnhancedBottomBar() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.deepNavy.withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, -10),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Consumer<CartProvider>(
+          builder: (context, cartProvider, child) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Order Summary
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.lightGradient,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Items (${cartProvider.totalItems})',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: AppTheme.charcoalGray,
+                            ),
+                          ),
+                          Text(
+                            'Rp ${cartProvider.totalPrice}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        height: 1,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              AppTheme.warmBeige.withValues(alpha: 0.5),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total',
+                            style: GoogleFonts.oswald(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                          Text(
+                            'Rp ${cartProvider.totalPrice}',
+                            style: GoogleFonts.oswald(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.deepNavy,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+                
+                // Pay Button
+                Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.deepNavy.withValues(alpha: 0.4),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: cartProvider.isLoading ? null : _showPayAtCashierDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: cartProvider.isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.store_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Pay at Cashier',
+                                style: GoogleFonts.oswald(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _removeItem(String cartId) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -1039,7 +938,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: const Icon(
-                  Icons.logout_rounded,
+                  Icons.delete_outline_rounded,
                   color: Colors.red,
                   size: 30,
                 ),
@@ -1047,9 +946,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 16),
               
               Text(
-                'Logout',
+                'Remove Item',
                 style: GoogleFonts.oswald(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.deepNavy,
                 ),
@@ -1057,7 +956,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               
               Text(
-                'Are you sure you want to logout from your account?',
+                'Are you sure you want to remove this item from your cart?',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   color: AppTheme.charcoalGray,
@@ -1095,14 +994,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: TextButton(
                         onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => const LoginScreen()),
-                            (route) => false,
-                          );
+                          Navigator.pop(context);
+                          context.read<CartProvider>().removeFromCart(cartId);
+                          _showSuccessSnackBar('Item removed from cart');
                         },
                         child: Text(
-                          'Logout',
+                          'Remove',
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
@@ -1116,6 +1013,635 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showClearCartDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: AppTheme.lightGradient,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: const Icon(
+                  Icons.warning_rounded,
+                  color: Colors.orange,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              Text(
+                'Clear Cart',
+                style: GoogleFonts.oswald(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.deepNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              Text(
+                'Are you sure you want to remove all items from your cart?',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  color: AppTheme.charcoalGray,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.deepNavy, width: 2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.poppins(
+                            color: AppTheme.deepNavy,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          context.read<CartProvider>().clearCart();
+                          _showSuccessSnackBar('Cart cleared successfully');
+                        },
+                        child: Text(
+                          'Clear All',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPayAtCashierDialog() async {
+    // Debug PocketBase connection first
+    if (kDebugMode) {
+      await PocketBaseDebug.debugPocketBase();
+    }
+
+    // Create payment from cart items
+    final cartProvider = context.read<CartProvider>();
+    final paymentProvider = context.read<PaymentProvider>();
+    
+    // Test the payment service connection
+    final paymentService = PaymentService();
+    final connectionTest = await paymentService.testConnection();
+    
+    if (!connectionTest) {
+      _showErrorSnackBar('Cannot connect to server. Please check if PocketBase is running on http://127.0.0.1:8090');
+      return;
+    }
+    
+    // List collections for debugging
+    if (kDebugMode) {
+      await paymentService.listCollections();
+    }
+    
+    debugPrint('Creating payment from cart items');
+    debugPrint('Cart items count: ${cartProvider.cartItems.length}');
+    
+    // Validate cart items have user IDs
+    if (cartProvider.cartItems.isEmpty) {
+      _showErrorSnackBar('Cart is empty');
+      return;
+    }
+    
+    // Check user IDs in cart items
+    final userIds = cartProvider.cartItems.map((item) => item.usersId).toSet();
+    debugPrint('User IDs in cart: $userIds');
+    
+    if (userIds.isEmpty || userIds.contains('') || userIds.contains(null)) {
+      _showErrorSnackBar('Cart items are missing user information. Please refresh and try again.');
+      return;
+    }
+    
+    if (userIds.length > 1) {
+      _showErrorSnackBar('Cart contains items from multiple users. Please contact support.');
+      return;
+    }
+    
+    // Create payment using the updated method (no userId parameter needed)
+    final payment = await paymentProvider.createPaymentFromCart(
+      cartItems: cartProvider.cartItems,
+    );
+    
+    if (payment == null) {
+      final error = paymentProvider.error ?? 'Failed to create payment. Please check the console for details.';
+      _showErrorSnackBar(error);
+      return;
+    }
+    
+    setState(() {
+      _currentPayment = payment;
+      _isPaymentConfirmed = false;
+    });
+    
+    // Start checking payment status
+    _startPaymentStatusCheck(payment.id);
+    
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Store the setDialogState function
+          _dialogSetState = setDialogState;
+          
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+            ),
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                gradient: AppTheme.lightGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.deepNavy.withValues(alpha: 0.3),
+                    blurRadius: 30,
+                    offset: const Offset(0, 15),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header with QR Icon
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      gradient: _isPaymentConfirmed 
+                          ? const LinearGradient(
+                              colors: [Colors.green, Colors.lightGreen],
+                            )
+                          : AppTheme.primaryGradient,
+                      borderRadius: BorderRadius.circular(40),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isPaymentConfirmed ? Colors.green : AppTheme.deepNavy)
+                              .withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: _isCartClearing 
+                        ? const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 3,
+                            ),
+                          )
+                        : Icon(
+                            _isPaymentConfirmed ? Icons.check_circle_rounded : Icons.qr_code_rounded,
+                            color: Colors.white,
+                            size: 40,
+                          ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Title
+                  ShaderMask(
+                    shaderCallback: (bounds) => (_isPaymentConfirmed 
+                        ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                        : AppTheme.primaryGradient).createShader(bounds),
+                    child: Text(
+                      _isCartClearing 
+                          ? 'Clearing Cart...'
+                          : _isPaymentConfirmed 
+                              ? 'Payment Confirmed!' 
+                              : 'Payment QR Code',
+                      style: GoogleFonts.oswald(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Order Number
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Order #GRBK${payment.id.substring(0, 4).toUpperCase()}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.deepNavy,
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // QR Code or Success Message
+                  if (!_isPaymentConfirmed) ...[
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: QrImageView(
+                        data: _generatePaymentQRData(payment.id),
+                        version: QrVersions.auto,
+                        size: 200.0,
+                        backgroundColor: Colors.white,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: AppTheme.deepNavy,
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: AppTheme.deepNavy,
+                        ),
+                        gapless: false,
+                        errorStateBuilder: (cxt, err) {
+                          return Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              color: AppTheme.softWhite,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  size: 48,
+                                  color: AppTheme.charcoalGray,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'QR Code Error',
+                                  style: GoogleFonts.poppins(
+                                    color: AppTheme.charcoalGray,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ] else ...[
+                    // Success Animation
+                    Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(40),
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 50,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Payment Successful!',
+                            style: GoogleFonts.oswald(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Cart cleared from database',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppTheme.charcoalGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Instructions or Status
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                gradient: _isPaymentConfirmed 
+                                    ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                                    : AppTheme.accentGradient,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                _isPaymentConfirmed 
+                                    ? Icons.check_circle_outline_rounded
+                                    : Icons.info_outline_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isPaymentConfirmed ? 'Payment Status' : 'Payment Instructions',
+                              style: GoogleFonts.oswald(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _isPaymentConfirmed 
+                              ? 'Payment confirmed by cashier.\nCart has been cleared from database.\nYou can now continue shopping.'
+                              : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation\n4. Cart will be automatically cleared',
+                          style: GoogleFonts.poppins(
+                            color: AppTheme.charcoalGray,
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Order Summary
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.deepNavy.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total Items',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppTheme.charcoalGray,
+                              ),
+                            ),
+                            Text(
+                              '${payment.totalItems} items',
+                              style: GoogleFonts.oswald(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Total Amount',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppTheme.charcoalGray,
+                              ),
+                            ),
+                            Text(
+                              'Rp ${payment.totalPrice}',
+                              style: GoogleFonts.oswald(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Continue Button
+                  Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: _isPaymentConfirmed 
+                          ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                          : LinearGradient(
+                              colors: [
+                                AppTheme.charcoalGray.withValues(alpha: 0.5),
+                                AppTheme.charcoalGray.withValues(alpha: 0.3),
+                              ],
+                            ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: _isPaymentConfirmed ? [
+                        BoxShadow(
+                          color: Colors.green.withValues(alpha: 0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 8),
+                        ),
+                      ] : [],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: (_isPaymentConfirmed && !_isCartClearing) ? () {
+                        _paymentStatusTimer?.cancel();
+                        Navigator.of(context).pop(); // Close the dialog
+                        
+                        // Navigate to home screen
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const HomeScreen(),
+                          ),
+                          (route) => route.isFirst, // Keep only the first route (home)
+                        );
+                      } : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isCartClearing) ...[
+                            const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ] else ...[
+                            Icon(
+                              _isPaymentConfirmed 
+                                  ? Icons.receipt_long_rounded 
+                                  : Icons.hourglass_empty_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ],
+                          const SizedBox(width: 12),
+                          Text(
+                            _isCartClearing 
+                                ? 'Clearing Cart...'
+                                : _isPaymentConfirmed 
+                                    ? 'Continue' 
+                                    : 'Waiting for Confirmation...',
+                            style: GoogleFonts.oswald(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      // Clean up timer and dialog setState reference when dialog is closed
+      _paymentStatusTimer?.cancel();
+      _dialogSetState = null;
+    });
+  }
+
+  void _showPaymentConfirmedAnimation() {
+    // You can add a subtle animation or sound here
+    // For now, we'll just show a brief snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(
+              'Payment confirmed! Cart cleared from database.',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }

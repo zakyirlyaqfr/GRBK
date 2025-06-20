@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'providers/product_provider.dart';
 import 'providers/payment_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/order_provider.dart';
 import 'user_screens/auth/splash_screen.dart';
 import 'utils/app_theme.dart';
 
@@ -22,6 +23,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
+        ChangeNotifierProvider(create: (_) => OrderProvider()),
       ],
       child: MaterialApp(
         title: 'GRBK Coffee Shop',

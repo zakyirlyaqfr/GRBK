@@ -103,4 +103,12 @@ class CartModel {
   
   // Helper method to check if cart item is linked to a payment
   bool get hasPayment => paymentId != null && paymentId!.isNotEmpty;
+
+  String? get productImageUrl {
+    if (productImage != null && productsId.isNotEmpty) {
+      // Ganti baseUrl sesuai backend kamu
+      return 'http://127.0.0.1:8090/api/files/products/$productsId/$productImage';
+    }
+    return null;
+  }
 }
