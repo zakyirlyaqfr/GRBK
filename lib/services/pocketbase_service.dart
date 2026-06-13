@@ -10,7 +10,7 @@ import '../models/user_model.dart';
 class PocketBaseService {
   static const String baseUrl = 'http://127.0.0.1:8090';
   static const String apiUrl = '$baseUrl/api';
-  
+
   String? _authToken;
   UserModel? _currentUser;
 
@@ -41,13 +41,13 @@ class PocketBaseService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List<dynamic> items = data['items'] ?? [];
-        
+
         if (items.isEmpty) {
           await _createAdminUser();
         }
       }
     } catch (e) {
-      print('Error checking admin existence: $e');
+      debugPrint('Error checking admin existence: $e');
     }
   }
 
@@ -67,14 +67,14 @@ class PocketBaseService {
       );
 
       if (response.statusCode == 200) {
-        print('Admin user created successfully');
+        debugPrint('Admin user created successfully');
         return true;
       } else {
-        print('Failed to create admin user: ${response.body}');
+        debugPrint('Failed to create admin user: ${response.body}');
         return false;
       }
     } catch (e) {
-      print('Error creating admin user: $e');
+      debugPrint('Error creating admin user: $e');
       return false;
     }
   }
@@ -84,12 +84,12 @@ class PocketBaseService {
     final prefs = await SharedPreferences.getInstance();
     _authToken = prefs.getString('auth_token');
     final userJson = prefs.getString('current_user');
-    
+
     if (userJson != null) {
       try {
         _currentUser = UserModel.fromJson(jsonDecode(userJson));
       } catch (e) {
-        print('Error loading user data: $e');
+        debugPrint('Error loading user data: $e');
         await _clearAuthData();
       }
     }
@@ -130,12 +130,12 @@ class PocketBaseService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _authToken = data['token'];
-        
+
         final userData = data['record'];
         _currentUser = UserModel.fromJson(userData);
-        
+
         await _saveAuthData();
-        
+
         return {
           'success': true,
           'user': _currentUser,
@@ -149,15 +149,13 @@ class PocketBaseService {
         };
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Network error: $e'
-      };
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
   // Register
-  Future<Map<String, dynamic>> register(String name, String email, String password) async {
+  Future<Map<String, dynamic>> register(
+      String name, String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$apiUrl/collections/users/records'),
@@ -172,10 +170,7 @@ class PocketBaseService {
       );
 
       if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': 'Registration successful'
-        };
+        return {'success': true, 'message': 'Registration successful'};
       } else {
         final error = jsonDecode(response.body);
         return {
@@ -184,10 +179,7 @@ class PocketBaseService {
         };
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Network error: $e'
-      };
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
@@ -208,16 +200,12 @@ class PocketBaseService {
         Uri.parse('$apiUrl/collections/users/records/${_currentUser!.id}'),
       );
 
-      // Add authorization header
       request.headers['Authorization'] = 'Bearer $_authToken';
 
-      // Add text fields if provided
       if (name != null) request.fields['name'] = name;
       if (email != null) request.fields['email'] = email;
 
-      // Handle avatar upload
       if (avatarFile != null && !kIsWeb) {
-        // Mobile/Desktop platform
         var multipartFile = await http.MultipartFile.fromPath(
           'avatar',
           avatarFile.path,
@@ -225,17 +213,18 @@ class PocketBaseService {
         );
         request.files.add(multipartFile);
         debugPrint('Mobile avatar file added: ${avatarFile.path}');
-      } else if (webAvatarData != null && webAvatarData.isNotEmpty && kIsWeb) {
-        // Web platform
+      } else if (webAvatarData != null &&
+          webAvatarData.isNotEmpty &&
+          kIsWeb) {
         try {
           final RegExp regex = RegExp(r'data:image/([^;]+);base64,');
           final match = regex.firstMatch(webAvatarData);
-          
+
           if (match != null) {
             final String imageType = match.group(1) ?? 'png';
             final String base64Str = webAvatarData.replaceAll(regex, '');
             final bytes = base64Decode(base64Str);
-            
+
             final multipartFile = http.MultipartFile.fromBytes(
               'avatar',
               bytes,
@@ -264,7 +253,7 @@ class PocketBaseService {
         final data = jsonDecode(response.body);
         _currentUser = UserModel.fromJson(data);
         await _saveAuthData();
-        
+
         return {
           'success': true,
           'user': _currentUser,
@@ -279,10 +268,7 @@ class PocketBaseService {
       }
     } catch (e) {
       debugPrint('Update profile error: $e');
-      return {
-        'success': false,
-        'message': 'Network error: $e'
-      };
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
@@ -290,7 +276,8 @@ class PocketBaseService {
   Future<List<UserModel>> getUsers() async {
     try {
       final response = await http.get(
-        Uri.parse('$apiUrl/collections/users/records?filter=(admin=false)&sort=-created'),
+        Uri.parse(
+            '$apiUrl/collections/users/records?filter=(admin=false)&sort=-created'),
         headers: {
           'Content-Type': 'application/json',
           if (_authToken != null) 'Authorization': 'Bearer $_authToken',
@@ -304,7 +291,7 @@ class PocketBaseService {
       }
       return [];
     } catch (e) {
-      print('Error fetching users: $e');
+      debugPrint('Error fetching users: $e');
       return [];
     }
   }
@@ -330,20 +317,21 @@ class PocketBaseService {
       }
       return {'total': 0, 'active': 0};
     } catch (e) {
-      print('Error fetching user stats: $e');
+      debugPrint('Error fetching user stats: $e');
       return {'total': 0, 'active': 0};
     }
   }
 
   // Update admin profile
-  Future<Map<String, dynamic>> updateAdminProfile(String name, String email) async {
+  Future<Map<String, dynamic>> updateAdminProfile(
+      String name, String email) async {
     if (_currentUser == null || _authToken == null || !_currentUser!.admin) {
       return {'success': false, 'message': 'Not authenticated as admin'};
     }
 
     try {
-      print('Updating admin profile: name=$name, email=$email');
-      
+      debugPrint('Updating admin profile: name=$name, email=$email');
+
       final response = await http.patch(
         Uri.parse('$apiUrl/collections/users/records/${_currentUser!.id}'),
         headers: {
@@ -356,14 +344,14 @@ class PocketBaseService {
         }),
       );
 
-      print('Update response status: ${response.statusCode}');
-      print('Update response body: ${response.body}');
+      debugPrint('Update response status: ${response.statusCode}');
+      debugPrint('Update response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _currentUser = UserModel.fromJson(data);
         await _saveAuthData();
-        
+
         return {
           'success': true,
           'user': _currentUser,
@@ -371,23 +359,21 @@ class PocketBaseService {
         };
       } else {
         final error = jsonDecode(response.body);
-        print('Update error: $error');
+        debugPrint('Update error: $error');
         return {
           'success': false,
           'message': error['message'] ?? 'Update failed'
         };
       }
     } catch (e) {
-      print('Update exception: $e');
-      return {
-        'success': false,
-        'message': 'Network error: $e'
-      };
+      debugPrint('Update exception: $e');
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
   // Change password
-  Future<Map<String, dynamic>> changePassword(String currentPassword, String newPassword) async {
+  Future<Map<String, dynamic>> changePassword(
+      String currentPassword, String newPassword) async {
     if (_currentUser == null || _authToken == null) {
       return {'success': false, 'message': 'Not authenticated'};
     }
@@ -407,10 +393,7 @@ class PocketBaseService {
       );
 
       if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': 'Password changed successfully'
-        };
+        return {'success': true, 'message': 'Password changed successfully'};
       } else {
         final error = jsonDecode(response.body);
         return {
@@ -419,10 +402,7 @@ class PocketBaseService {
         };
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Network error: $e'
-      };
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
@@ -433,17 +413,17 @@ class PocketBaseService {
 
   // Check if current user is admin
   bool get isAdmin => _currentUser?.admin == true;
-  
+
   void setAuthToken(String token) {
     _authToken = token;
     debugPrint('Auth token set: ${token.substring(0, 10)}...');
   }
-  
+
   void clearAuthToken() {
     _authToken = null;
     debugPrint('Auth token cleared');
   }
-  
+
   // Test if PocketBase is running
   static Future<bool> isServerRunning() async {
     try {
@@ -456,7 +436,7 @@ class PocketBaseService {
     }
   }
 
-  // Add this field to expose the PocketBase SDK client
+  // PocketBase SDK client
   final PocketBase pb = PocketBase(baseUrl);
 }
 
@@ -467,7 +447,8 @@ extension PocketBaseTestUser on PocketBaseService {
     const testName = 'Test User';
 
     final findResponse = await http.get(
-      Uri.parse('${PocketBaseService.apiUrl}/collections/users/records?filter=(email="$testEmail")'),
+      Uri.parse(
+          '${PocketBaseService.apiUrl}/collections/users/records?filter=(email="$testEmail")'),
       headers: {'Content-Type': 'application/json'},
     );
 

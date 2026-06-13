@@ -25,14 +25,14 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  
+
   // ignore: unused_field
   PaymentModel? _currentPayment;
   bool _isPaymentConfirmed = false;
   Timer? _paymentStatusTimer;
   bool _isCartClearing = false;
   bool _isOrderCreating = false;
-  
+
   StateSetter? _dialogSetState;
 
   @override
@@ -42,7 +42,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -50,7 +50,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
@@ -58,7 +58,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       parent: _animationController,
       curve: Curves.easeOutCubic,
     ));
-    
+
     _animationController.forward();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,8 +79,9 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
 
   void _startPaymentStatusCheck(String paymentId) {
     debugPrint('🔄 Starting payment status check for: $paymentId');
-    
-    _paymentStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+
+    _paymentStatusTimer =
+        Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) {
         debugPrint('⚠️ Widget unmounted, canceling timer');
         timer.cancel();
@@ -89,21 +90,22 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
 
       try {
         debugPrint('🔍 Checking payment status for: $paymentId');
-        
+
         final paymentProvider = context.read<PaymentProvider>();
         final payment = await paymentProvider.getPaymentById(paymentId);
-        
+
         if (payment == null) {
           debugPrint('⚠️ Payment not found: $paymentId');
           return;
         }
 
-        debugPrint('📊 Payment status: ${payment.status} (confirmed: ${payment.isConfirmed})');
-        
+        debugPrint(
+            '📊 Payment status: ${payment.status} (confirmed: ${payment.isConfirmed})');
+
         if (payment.isConfirmed && payment.status == true) {
           debugPrint('✅ Payment confirmed! Creating order...');
           timer.cancel();
-          
+
           if (mounted) {
             await _handlePaymentConfirmation(payment);
           }
@@ -119,7 +121,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       setState(() {
         _isOrderCreating = true;
       });
-      
+
       if (_dialogSetState != null) {
         _dialogSetState!(() {
           _isOrderCreating = true;
@@ -163,16 +165,16 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
 
       if (order != null) {
         debugPrint('✅ Order created successfully: ${order.id}');
-        
+
         // Clear cart from database
         await _clearCartFromDatabase(payment.userId);
-        
+
         setState(() {
           _isPaymentConfirmed = true;
           _currentPayment = payment;
           _isOrderCreating = false;
         });
-      
+
         if (_dialogSetState != null) {
           _dialogSetState!(() {
             _isPaymentConfirmed = true;
@@ -180,25 +182,24 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
             _isOrderCreating = false;
           });
         }
-      
+
         _showPaymentConfirmedAnimation();
       } else {
         throw Exception('Failed to create order - orderProvider returned null');
       }
-
     } catch (e) {
       debugPrint('❌ Error handling payment confirmation: $e');
-      
+
       setState(() {
         _isOrderCreating = false;
       });
-      
+
       if (_dialogSetState != null) {
         _dialogSetState!(() {
           _isOrderCreating = false;
         });
       }
-      
+
       if (mounted) {
         _showErrorSnackBar('Failed to create order: ${e.toString()}');
       }
@@ -210,7 +211,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       setState(() {
         _isCartClearing = true;
       });
-    
+
       if (_dialogSetState != null) {
         _dialogSetState!(() {
           _isCartClearing = true;
@@ -218,24 +219,24 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
       }
 
       final cartProvider = context.read<CartProvider>();
-      
+
       debugPrint('🧹 Clearing cart from database for user: $userId');
-      
+
       await cartProvider.clearCartForPayment(userId);
-      
+
       debugPrint('✅ Cart cleared successfully from database');
-      
     } catch (e) {
       debugPrint('❌ Error clearing cart from database: $e');
       if (mounted) {
-        _showErrorSnackBar('Cart cleared locally but may need manual cleanup in database');
+        _showErrorSnackBar(
+            'Cart cleared locally but may need manual cleanup in database');
       }
     } finally {
       if (mounted) {
         setState(() {
           _isCartClearing = false;
         });
-      
+
         if (_dialogSetState != null) {
           _dialogSetState!(() {
             _isCartClearing = false;
@@ -300,8 +301,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     );
                   }
 
-                  return cartProvider.cartItems.isEmpty 
-                      ? _buildEmptyCart() 
+                  return cartProvider.cartItems.isEmpty
+                      ? _buildEmptyCart()
                       : _buildCartContent();
                 },
               ),
@@ -438,11 +439,10 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 32),
-                
                 ShaderMask(
-                  shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
+                  shaderCallback: (bounds) =>
+                      AppTheme.primaryGradient.createShader(bounds),
                   child: Text(
                     'Your cart is empty',
                     style: GoogleFonts.oswald(
@@ -453,9 +453,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 12),
-                
                 Text(
                   'Discover our amazing coffee collection\nand add your favorites to get started!',
                   style: GoogleFonts.poppins(
@@ -465,9 +463,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                
                 const SizedBox(height: 40),
-                
                 Container(
                   decoration: BoxDecoration(
                     gradient: AppTheme.primaryGradient,
@@ -485,7 +481,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -577,7 +574,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    child: item.productImage != null && item.productImage!.isNotEmpty
+                    child: item.productImage != null &&
+                            item.productImage!.isNotEmpty
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(20),
                             child: Image.network(
@@ -604,9 +602,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                           ),
                   ),
-                  
                   const SizedBox(width: 16),
-                  
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -620,19 +616,20 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        
-                        if (item.temperature.isNotEmpty && item.temperature != '-')
+                        if (item.temperature.isNotEmpty &&
+                            item.temperature != '-')
                           Wrap(
                             spacing: 8,
                             children: [
-                              _buildInfoChip(item.temperature, Icons.thermostat_rounded),
-                              if (item.sweetness.isNotEmpty && item.sweetness != '-')
-                                _buildInfoChip(item.sweetness, Icons.favorite_rounded),
+                              _buildInfoChip(
+                                  item.temperature, Icons.thermostat_rounded),
+                              if (item.sweetness.isNotEmpty &&
+                                  item.sweetness != '-')
+                                _buildInfoChip(
+                                    item.sweetness, Icons.favorite_rounded),
                             ],
                           ),
-                        
                         const SizedBox(height: 8),
-                        
                         if (item.specialNotes.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(8),
@@ -661,9 +658,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                               ],
                             ),
                           ),
-                        
                         const SizedBox(height: 12),
-                        
                         Text(
                           'Rp ${item.productPrice ?? 0}',
                           style: GoogleFonts.oswald(
@@ -677,9 +672,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              
               const SizedBox(height: 16),
-              
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -696,14 +689,13 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           Icons.remove_rounded,
                           () {
                             context.read<CartProvider>().updateCartItemQuantity(
-                              item.id, 
-                              item.quantity - 1
-                            );
+                                item.id, item.quantity - 1);
                           },
                         ),
                         Container(
                           margin: const EdgeInsets.symmetric(horizontal: 16),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
@@ -721,15 +713,12 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           Icons.add_rounded,
                           () {
                             context.read<CartProvider>().updateCartItemQuantity(
-                              item.id, 
-                              item.quantity + 1
-                            );
+                                item.id, item.quantity + 1);
                           },
                         ),
                       ],
                     ),
                   ),
-                  
                   Row(
                     children: [
                       Column(
@@ -916,9 +905,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-                
                 const SizedBox(height: 20),
-                
                 Container(
                   width: double.infinity,
                   height: 56,
@@ -934,7 +921,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     ],
                   ),
                   child: ElevatedButton(
-                    onPressed: cartProvider.isLoading ? null : _showPayAtCashierDialog,
+                    onPressed:
+                        cartProvider.isLoading ? null : _showPayAtCashierDialog,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
@@ -1011,7 +999,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 16),
-              
               Text(
                 'Remove Item',
                 style: GoogleFonts.oswald(
@@ -1021,7 +1008,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 8),
-              
               Text(
                 'Are you sure you want to remove this item from your cart?',
                 textAlign: TextAlign.center,
@@ -1031,7 +1017,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 24),
-              
               Row(
                 children: [
                   Expanded(
@@ -1114,7 +1099,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 16),
-              
               Text(
                 'Clear Cart',
                 style: GoogleFonts.oswald(
@@ -1124,7 +1108,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 8),
-              
               Text(
                 'Are you sure you want to remove all items from your cart?',
                 textAlign: TextAlign.center,
@@ -1134,7 +1117,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 24),
-              
               Row(
                 children: [
                   Expanded(
@@ -1188,79 +1170,95 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
   }
 
   void _showPayAtCashierDialog() async {
+    // 1. Ambil provider sebelum proses asinkron apa pun dijalankan
+    final cartProvider = context.read<CartProvider>();
+    final paymentProvider = context.read<PaymentProvider>();
+
     if (kDebugMode) {
       await PocketBaseDebug.debugPocketBase();
     }
 
-    final cartProvider = context.read<CartProvider>();
-    final paymentProvider = context.read<PaymentProvider>();
-    
     final paymentService = PaymentService();
     final connectionTest = await paymentService.testConnection();
-    
+
+    // 2. Pastikan widget masih mounted setelah await sebelum memanggil UI (SnackBar)
+    if (!mounted) return;
+
     if (!connectionTest) {
-      _showErrorSnackBar('Cannot connect to server. Please check if PocketBase is running on http://127.0.0.1:8090');
+      _showErrorSnackBar(
+          'Cannot connect to server. Please check if PocketBase is running on http://127.0.0.1:8090');
       return;
     }
-    
+
     if (kDebugMode) {
       await paymentService.listCollections();
     }
-    
+
     debugPrint('🔄 Creating payment from cart items');
     debugPrint('📦 Cart items count: ${cartProvider.cartItems.length}');
-    
+
     if (cartProvider.cartItems.isEmpty) {
+      if (!mounted) return;
       _showErrorSnackBar('Cart is empty');
       return;
     }
-    
+
     final userIds = cartProvider.cartItems.map((item) => item.usersId).toSet();
     debugPrint('👥 User IDs in cart: $userIds');
-    
+
     if (userIds.isEmpty || userIds.contains('') || userIds.contains(null)) {
-      _showErrorSnackBar('Cart items are missing user information. Please refresh and try again.');
+      if (!mounted) return;
+      _showErrorSnackBar(
+          'Cart items are missing user information. Please refresh and try again.');
       return;
     }
-    
+
     if (userIds.length > 1) {
-      _showErrorSnackBar('Cart contains items from multiple users. Please contact support.');
+      if (!mounted) return;
+      _showErrorSnackBar(
+          'Cart contains items from multiple users. Please contact support.');
       return;
     }
-    
+
     // Create payment but don't create order yet - order will be created when payment is confirmed
     debugPrint('💳 Creating payment...');
     final payment = await paymentProvider.createPaymentFromCart(
       cartItems: cartProvider.cartItems,
     );
-    
+
+    // FIX: Menambahkan kurung kurawal karena statement return ada di baris baru
+    if (!mounted) {
+      return; // Guard sebelum pengecekan error dari hasil await di atas
+    }
+
     if (payment == null) {
-      final error = paymentProvider.error ?? 'Failed to create payment. Please check the console for details.';
+      final error = paymentProvider.error ??
+          'Failed to create payment. Please check the console for details.';
       _showErrorSnackBar(error);
       return;
     }
-    
+
     debugPrint('✅ Payment created: ${payment.id}');
     debugPrint('👤 Payment user ID: ${payment.userId}');
     debugPrint('💰 Payment total: ${payment.totalPrice}');
     debugPrint('📦 Payment items: ${payment.items.length}');
-    
+
     setState(() {
       _currentPayment = payment;
       _isPaymentConfirmed = false;
     });
-    
+
     _startPaymentStatusCheck(payment.id);
-    
+
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           _dialogSetState = setDialogState;
-          
+
           return Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(32),
@@ -1287,7 +1285,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      gradient: _isPaymentConfirmed 
+                      gradient: _isPaymentConfirmed
                           ? const LinearGradient(
                               colors: [Colors.green, Colors.lightGreen],
                             )
@@ -1295,7 +1293,9 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(40),
                       boxShadow: [
                         BoxShadow(
-                          color: (_isPaymentConfirmed ? Colors.green : AppTheme.deepNavy)
+                          color: (_isPaymentConfirmed
+                                  ? Colors.green
+                                  : AppTheme.deepNavy)
                               .withValues(alpha: 0.3),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
@@ -1312,25 +1312,27 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                           )
                         : Icon(
-                            _isPaymentConfirmed ? Icons.check_circle_rounded : Icons.qr_code_rounded,
+                            _isPaymentConfirmed
+                                ? Icons.check_circle_rounded
+                                : Icons.qr_code_rounded,
                             color: Colors.white,
                             size: 40,
                           ),
                   ),
-                  
                   const SizedBox(height: 20),
-                  
                   ShaderMask(
-                    shaderCallback: (bounds) => (_isPaymentConfirmed 
-                        ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
-                        : AppTheme.primaryGradient).createShader(bounds),
+                    shaderCallback: (bounds) => (_isPaymentConfirmed
+                            ? const LinearGradient(
+                                colors: [Colors.green, Colors.lightGreen])
+                            : AppTheme.primaryGradient)
+                        .createShader(bounds),
                     child: Text(
-                      _isOrderCreating 
+                      _isOrderCreating
                           ? 'Creating Order...'
-                          : _isCartClearing 
+                          : _isCartClearing
                               ? 'Clearing Cart...'
-                              : _isPaymentConfirmed 
-                                  ? 'Order Created!' 
+                              : _isPaymentConfirmed
+                                  ? 'Order Created!'
                                   : 'Payment QR Code',
                       style: GoogleFonts.oswald(
                         fontSize: 28,
@@ -1340,11 +1342,10 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 8),
-                  
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(20),
@@ -1358,9 +1359,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 20),
-                  
                   if (!_isPaymentConfirmed) ...[
                     Container(
                       padding: const EdgeInsets.all(20),
@@ -1468,9 +1467,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ],
-                  
                   const SizedBox(height: 20),
-                  
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1484,13 +1481,16 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                gradient: _isPaymentConfirmed 
-                                    ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                                gradient: _isPaymentConfirmed
+                                    ? const LinearGradient(colors: [
+                                        Colors.green,
+                                        Colors.lightGreen
+                                      ])
                                     : AppTheme.accentGradient,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
-                                _isPaymentConfirmed 
+                                _isPaymentConfirmed
                                     ? Icons.check_circle_outline_rounded
                                     : Icons.info_outline_rounded,
                                 color: Colors.white,
@@ -1499,7 +1499,9 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _isPaymentConfirmed ? 'Order Status' : 'Payment Instructions',
+                              _isPaymentConfirmed
+                                  ? 'Order Status'
+                                  : 'Payment Instructions',
                               style: GoogleFonts.oswald(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -1510,7 +1512,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          _isPaymentConfirmed 
+                          _isPaymentConfirmed
                               ? 'Payment confirmed by cashier.\nOrder has been created and saved to database.\nCart has been cleared.\nYou can now continue shopping.'
                               : '1. Show this QR code to the cashier\n2. Complete payment at the counter\n3. Wait for cashier confirmation\n4. Order will be automatically created',
                           style: GoogleFonts.poppins(
@@ -1522,9 +1524,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-                  
                   const SizedBox(height: 20),
-                  
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1584,15 +1584,14 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-                  
                   const SizedBox(height: 24),
-                  
                   Container(
                     width: double.infinity,
                     height: 56,
                     decoration: BoxDecoration(
-                      gradient: _isPaymentConfirmed 
-                          ? const LinearGradient(colors: [Colors.green, Colors.lightGreen])
+                      gradient: _isPaymentConfirmed
+                          ? const LinearGradient(
+                              colors: [Colors.green, Colors.lightGreen])
                           : LinearGradient(
                               colors: [
                                 AppTheme.charcoalGray.withValues(alpha: 0.5),
@@ -1600,26 +1599,32 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                               ],
                             ),
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: _isPaymentConfirmed ? [
-                        BoxShadow(
-                          color: Colors.green.withValues(alpha: 0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 8),
-                        ),
-                      ] : [],
+                      boxShadow: _isPaymentConfirmed
+                          ? [
+                              BoxShadow(
+                                color: Colors.green.withValues(alpha: 0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 8),
+                              ),
+                            ]
+                          : [],
                     ),
                     child: ElevatedButton(
-                      onPressed: (_isPaymentConfirmed && !_isCartClearing && !_isOrderCreating) ? () {
-                        _paymentStatusTimer?.cancel();
-                        Navigator.of(context).pop();
-                        
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (context) => const HomeScreen(),
-                          ),
-                          (route) => route.isFirst,
-                        );
-                      } : null,
+                      onPressed: (_isPaymentConfirmed &&
+                              !_isCartClearing &&
+                              !_isOrderCreating)
+                          ? () {
+                              _paymentStatusTimer?.cancel();
+                              Navigator.of(context).pop();
+
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (context) => const HomeScreen(),
+                                ),
+                                (route) => route.isFirst,
+                              );
+                            }
+                          : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
@@ -1641,8 +1646,8 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                             ),
                           ] else ...[
                             Icon(
-                              _isPaymentConfirmed 
-                                  ? Icons.receipt_long_rounded 
+                              _isPaymentConfirmed
+                                  ? Icons.receipt_long_rounded
                                   : Icons.hourglass_empty_rounded,
                               color: Colors.white,
                               size: 24,
@@ -1650,12 +1655,12 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                           ],
                           const SizedBox(width: 12),
                           Text(
-                            _isOrderCreating 
+                            _isOrderCreating
                                 ? 'Creating Order...'
-                                : _isCartClearing 
+                                : _isCartClearing
                                     ? 'Clearing Cart...'
-                                    : _isPaymentConfirmed 
-                                        ? 'Continue' 
+                                    : _isPaymentConfirmed
+                                        ? 'Continue'
                                         : 'Waiting for Confirmation...',
                             style: GoogleFonts.oswald(
                               fontSize: 16,

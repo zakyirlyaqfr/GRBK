@@ -202,9 +202,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             ),
                           ),
                         ),
-
                         const SizedBox(width: 12),
-
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +231,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ],
                     ),
                   ),
-
                   Expanded(
                     child: _buildScreenContent(),
                   ),
@@ -241,7 +238,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ),
             ),
           ),
-
           AnimatedBuilder(
             animation: _overlayOpacityAnimation,
             builder: (context, child) {
@@ -260,7 +256,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   : const SizedBox.shrink();
             },
           ),
-
           SlideTransition(
             position: _sidebarSlideAnimation,
             child: _buildSidebar(),
@@ -324,7 +319,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ],
               ),
             ),
-
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -398,7 +392,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
               ),
             ),
-
             Container(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -448,7 +441,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       onTap: () {
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          MaterialPageRoute(
+                              builder: (context) => const LoginScreen()),
                           (route) => false,
                         );
                       },
@@ -459,10 +453,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
+                          color: Colors.red.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.red.withOpacity(0.3),
+                            color: Colors.red.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -655,9 +649,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ],
                 ),
               ),
-
               const SizedBox(height: 24),
-
               Text(
                 'Our Products',
                 style: GoogleFonts.oswald(
@@ -666,25 +658,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   color: AppTheme.deepNavy,
                 ),
               ),
-
               const SizedBox(height: 12),
-
               SizedBox(
                 height: 40,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: _categories.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 8),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     final category = _categories[index];
                     final isSelected = _selectedCategory == category;
                     return GestureDetector(
                       onTap: () => setState(() => _selectedCategory = category),
                       child: Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          gradient: isSelected ? AppTheme.primaryGradient : null,
+                          gradient:
+                              isSelected ? AppTheme.primaryGradient : null,
                           color: isSelected ? null : Colors.white,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
@@ -707,7 +699,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           child: Text(
                             category,
                             style: GoogleFonts.poppins(
-                              color: isSelected ? Colors.white : AppTheme.deepNavy,
+                              color:
+                                  isSelected ? Colors.white : AppTheme.deepNavy,
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
                             ),
@@ -718,9 +711,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   },
                 ),
               ),
-
               const SizedBox(height: 16),
-
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -736,7 +727,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   return _buildEnhancedProductCard(product);
                 },
               ),
-
               const SizedBox(height: 20),
             ],
           ),
@@ -750,9 +740,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     if (_selectedCategory == 'All') {
       filtered = List<ProductModel>.from(products);
     } else {
-      filtered = products.where((product) => product.category == _selectedCategory).toList();
+      filtered = products
+          .where((product) => product.category == _selectedCategory)
+          .toList();
     }
-    filtered.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    filtered
+        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return filtered;
   }
 
@@ -858,7 +851,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ),
                       child: product.image != null && product.image!.isNotEmpty
                           ? Image.network(
-                              context.read<ProductProvider>().getImageUrl(product),
+                              context
+                                  .read<ProductProvider>()
+                                  .getImageUrl(product),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Center(
@@ -866,7 +861,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                     width: 80,
                                     height: 80,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.9),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.9),
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: const Center(

@@ -29,12 +29,16 @@ class DebugScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            
             ElevatedButton(
               onPressed: () async {
                 await PocketBaseDebug.debugPocketBase();
+
+                // Verify the widget is still on screen before showing the SnackBar
+                if (!context.mounted) return;
+
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Debug info printed to console')),
+                  const SnackBar(
+                      content: Text('Debug info printed to console')),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -49,14 +53,17 @@ class DebugScreen extends StatelessWidget {
                 ),
               ),
             ),
-            
             const SizedBox(height: 16),
-            
             ElevatedButton(
               onPressed: () async {
                 await TestPocketBase.runTests();
+
+                // Verify the widget is still on screen before showing the SnackBar
+                if (!context.mounted) return;
+
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Tests completed - check console')),
+                  const SnackBar(
+                      content: Text('Tests completed - check console')),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -71,9 +78,7 @@ class DebugScreen extends StatelessWidget {
                 ),
               ),
             ),
-            
             const SizedBox(height: 20),
-            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

@@ -34,7 +34,9 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
 
   List<ProductModel> _getFilteredProducts(List<ProductModel> products) {
     if (_selectedCategory == 'All') return products;
-    return products.where((product) => product.category == _selectedCategory).toList();
+    return products
+        .where((product) => product.category == _selectedCategory)
+        .toList();
   }
 
   @override
@@ -69,7 +71,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   gradient: AppTheme.primaryGradient,
                   borderRadius: BorderRadius.circular(12),
@@ -84,7 +87,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.inventory_rounded, color: Colors.white, size: 16),
+                    const Icon(Icons.inventory_rounded,
+                        color: Colors.white, size: 16),
                     const SizedBox(width: 6),
                     Text(
                       'Manajemen Stok',
@@ -99,9 +103,7 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
               ),
             ],
           ),
-          
           const SizedBox(height: 20),
-          
           Consumer<ProductProvider>(
             builder: (context, productProvider, child) {
               if (productProvider.isLoading) {
@@ -162,23 +164,21 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                           'Stok Tersedia',
                           productProvider.availableProducts.length.toString(),
                           Icons.check_circle_rounded,
-                          const LinearGradient(colors: [Colors.green, Colors.lightGreen]),
+                          const LinearGradient(
+                              colors: [Colors.green, Colors.lightGreen]),
                         ),
                         _buildStockSummaryCard(
                           'Stok Habis',
                           productProvider.unavailableProducts.length.toString(),
                           Icons.cancel_rounded,
-                          const LinearGradient(colors: [Colors.red, Colors.redAccent]),
+                          const LinearGradient(
+                              colors: [Colors.red, Colors.redAccent]),
                         ),
                       ],
                     ),
-                    
                     const SizedBox(height: 20),
-                    
                     _buildCategories(),
-                    
                     const SizedBox(height: 16),
-                    
                     Expanded(
                       child: _buildProductsGrid(productProvider),
                     ),
@@ -192,7 +192,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
     );
   }
 
-  Widget _buildStockSummaryCard(String title, String value, IconData icon, Gradient gradient) {
+  Widget _buildStockSummaryCard(
+      String title, String value, IconData icon, Gradient gradient) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -261,7 +262,7 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: isSelected 
+                    color: isSelected
                         ? AppTheme.deepNavy.withValues(alpha: 0.3)
                         : Colors.black.withValues(alpha: 0.05),
                     blurRadius: 6,
@@ -290,7 +291,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
     final filteredProducts = _getFilteredProducts(productProvider.products);
 
     // Sort products alphabetically by name (A-Z)
-    filteredProducts.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    filteredProducts
+        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     if (filteredProducts.isEmpty) {
       return Center(
@@ -330,9 +332,10 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
     );
   }
 
-  Widget _buildStockProductCard(ProductModel product, ProductProvider productProvider) {
+  Widget _buildStockProductCard(
+      ProductModel product, ProductProvider productProvider) {
     final bool isAvailable = product.stock;
-    
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -358,7 +361,9 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  gradient: isAvailable ? AppTheme.neutralGradient : AppTheme.lightGradient,
+                  gradient: isAvailable
+                      ? AppTheme.neutralGradient
+                      : AppTheme.lightGradient,
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
@@ -381,7 +386,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                                     width: 50,
                                     height: 50,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.9),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.9),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Center(
@@ -424,7 +430,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: (isAvailable ? Colors.green : Colors.red).withValues(alpha: 0.3),
+                              color: (isAvailable ? Colors.green : Colors.red)
+                                  .withValues(alpha: 0.3),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
@@ -448,7 +455,9 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 11,
-                        color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                        color: isAvailable
+                            ? AppTheme.deepNavy
+                            : AppTheme.charcoalGray,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -457,13 +466,14 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                     Text(
                       'Rp ${product.price}',
                       style: GoogleFonts.oswald(
-                        color: isAvailable ? AppTheme.deepNavy : AppTheme.charcoalGray,
+                        color: isAvailable
+                            ? AppTheme.deepNavy
+                            : AppTheme.charcoalGray,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
                     ),
                     const Spacer(),
-                    
                     Row(
                       children: [
                         Expanded(
@@ -481,17 +491,21 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                           child: Switch(
                             value: isAvailable,
                             onChanged: (value) async {
-                              final success = await productProvider.updateProductStock(product.id, value);
+                              final success = await productProvider
+                                  .updateProductStock(product.id, value);
                               if (success) {
                                 _showStockUpdateSnackBar(product.name, value);
                               } else {
-                                _showErrorSnackBar(productProvider.error ?? 'Failed to update stock');
+                                _showErrorSnackBar(productProvider.error ??
+                                    'Failed to update stock');
                               }
                             },
-                            activeColor: Colors.green,
+                            activeThumbColor: Colors.green,
                             inactiveThumbColor: Colors.red,
-                            inactiveTrackColor: Colors.red.withValues(alpha: 0.3),
-                            activeTrackColor: Colors.green.withValues(alpha: 0.3),
+                            inactiveTrackColor:
+                                Colors.red.withValues(alpha: 0.3),
+                            activeTrackColor:
+                                Colors.green.withValues(alpha: 0.3),
                           ),
                         ),
                       ],
@@ -520,7 +534,8 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
             Expanded(
               child: Text(
                 '$productName ${isAvailable ? 'tersedia' : 'habis'}',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600, fontSize: 12),
               ),
             ),
           ],

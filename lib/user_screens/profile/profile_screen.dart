@@ -19,7 +19,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _pocketbaseService = PocketBaseService();
   final ImagePicker _imagePicker = ImagePicker();
-  
+
   Map<String, dynamic> _userProfile = {
     'name': 'Loading...',
     'email': 'Loading...',
@@ -43,11 +43,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user != null) {
       final paymentProvider = context.read<PaymentProvider>();
       await paymentProvider.loadPaymentsByUserId(user.id);
-      
+
       final totalOrders = paymentProvider.payments
           .where((payment) => payment.isConfirmed)
           .length;
-      
+
       setState(() {
         _userProfile = {
           'name': user.name,
@@ -62,8 +62,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _formatDate(DateTime date) {
     final months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
     ];
     return '${months[date.month - 1]} ${date.year}';
   }
@@ -126,7 +136,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: _buildProfileImage(),
                   ),
                 ),
-                
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -160,9 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          
           const SizedBox(height: 24),
-          
           Text(
             _userProfile['name'],
             style: GoogleFonts.oswald(
@@ -172,9 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               letterSpacing: 1,
             ),
           ),
-          
           const SizedBox(height: 4),
-          
           Text(
             _userProfile['email'],
             style: GoogleFonts.poppins(
@@ -183,9 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               fontWeight: FontWeight.w400,
             ),
           ),
-          
           const SizedBox(height: 24),
-          
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -199,7 +202,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildStatItem('Total Orders', '${_userProfile['totalOrders']}', Icons.shopping_bag_rounded),
+                _buildStatItem('Total Orders', '${_userProfile['totalOrders']}',
+                    Icons.shopping_bag_rounded),
                 Container(
                   width: 1,
                   height: 40,
@@ -215,7 +219,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                _buildStatItem('Member Since', _userProfile['joinDate'], Icons.calendar_today_rounded),
+                _buildStatItem('Member Since', _userProfile['joinDate'],
+                    Icons.calendar_today_rounded),
               ],
             ),
           ),
@@ -229,11 +234,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_profileImage != null) {
       return Image.file(_profileImage!, fit: BoxFit.cover);
     }
-    
+
     if (_webImageData != null) {
       return Image.network(_webImageData!, fit: BoxFit.cover);
     }
-    
+
     final user = _pocketbaseService.currentUser;
     if (user != null && user.avatar != null && user.avatar!.isNotEmpty) {
       return Image.network(
@@ -254,7 +259,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       );
     }
-    
+
     return Container(
       decoration: const BoxDecoration(
         gradient: AppTheme.lightGradient,
@@ -481,7 +486,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       if (kIsWeb) {
         // Web platform
-        final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
+        final html.FileUploadInputElement uploadInput =
+            html.FileUploadInputElement();
         uploadInput.accept = 'image/*';
         uploadInput.click();
 
@@ -490,25 +496,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (files!.isNotEmpty) {
             final file = files[0];
             final reader = html.FileReader();
-            
+
             reader.onLoadEnd.listen((e) {
               final result = reader.result as String;
               debugPrint('Web avatar selected: ${file.name}');
               debugPrint('Data URL length: ${result.length}');
-              
+
               setState(() {
                 _webImageData = result;
                 _profileImage = null;
               });
-              
+
               _updateProfileImage();
             });
-            
+
             reader.onError.listen((e) {
               debugPrint('Error reading file: $e');
               _showErrorSnackBar('Gagal membaca file gambar');
             });
-            
+
             reader.readAsDataUrl(file);
           }
         });
@@ -520,14 +526,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           maxHeight: 800,
           imageQuality: 80,
         );
-        
+
         if (image != null) {
           debugPrint('Mobile avatar selected: ${image.path}');
           setState(() {
             _profileImage = File(image.path);
             _webImageData = null;
           });
-          
+
           _updateProfileImage();
         }
       }
@@ -539,7 +545,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Update profile image
   Future<void> _updateProfileImage() async {
-    if (_profileImage == null && (_webImageData == null || _webImageData!.isEmpty)) {
+    if (_profileImage == null &&
+        (_webImageData == null || _webImageData!.isEmpty)) {
       return;
     }
 
@@ -550,8 +557,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       debugPrint('=== UPDATING PROFILE AVATAR ===');
       debugPrint('Has image file: ${_profileImage != null}');
-      debugPrint('Has web image data: ${_webImageData != null && _webImageData!.isNotEmpty}');
-      
+      debugPrint(
+          'Has web image data: ${_webImageData != null && _webImageData!.isNotEmpty}');
+
       final result = await _pocketbaseService.updateProfile(
         avatarFile: _profileImage,
         webAvatarData: _webImageData,
@@ -561,7 +569,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _showSuccessSnackBar('Profile picture updated successfully!');
         _loadUserProfile(); // Reload profile data
       } else {
-        _showErrorSnackBar(result['message'] ?? 'Failed to update profile picture');
+        _showErrorSnackBar(
+            result['message'] ?? 'Failed to update profile picture');
       }
     } catch (e) {
       debugPrint('Error updating profile image: $e');
@@ -575,7 +584,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showImagePickerOptions() {
     if (_isUpdatingProfile) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -588,7 +597,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 gradient: AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+              child: const Icon(Icons.camera_alt_rounded,
+                  color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
             Text(
@@ -659,7 +669,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 gradient: AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.edit_rounded, color: Colors.white, size: 20),
+              child:
+                  const Icon(Icons.edit_rounded, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
             Text(
@@ -713,14 +724,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 name: nameController.text,
                 email: emailController.text,
               );
-              
+
+              // Pastikan context masih valid setelah proses await selesai
+              if (!context.mounted) return;
+
               Navigator.pop(context);
-              
+
               if (result['success']) {
                 _showSuccessSnackBar('Profile updated successfully!');
                 _loadUserProfile();
               } else {
-                _showErrorSnackBar(result['message'] ?? 'Failed to update profile');
+                _showErrorSnackBar(
+                    result['message'] ?? 'Failed to update profile');
               }
             },
             style: ElevatedButton.styleFrom(
@@ -763,7 +778,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Help & Support'),
-        content: const Text('For support, please contact us at support@grbk.com'),
+        content:
+            const Text('For support, please contact us at support@grbk.com'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -779,7 +795,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('About GRBK Coffee'),
-        content: const Text('GRBK Coffee - Your premium coffee experience since 2024.'),
+        content: const Text(
+            'GRBK Coffee - Your premium coffee experience since 2024.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

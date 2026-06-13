@@ -103,8 +103,8 @@ class AppTheme {
       ),
     ),
     
-    // Enhanced Card Theme
-    cardTheme: CardTheme(
+    // Enhanced Card Theme (Changed to CardThemeData)
+    cardTheme: CardThemeData(
       color: Colors.white,
       elevation: 8,
       shadowColor: deepNavy.withValues(alpha: 0.15),
@@ -207,13 +207,18 @@ class AppTheme {
   );
   
   static MaterialColor _createMaterialColor(Color color) {
-    List strengths = <double>[.05];
+    List<double> strengths = <double>[.05];
     Map<int, Color> swatch = {};
-    final int r = color.red, g = color.green, b = color.blue;
+    
+    // Updated to use the non-deprecated component getters (.r, .g, .b)
+    final int r = (color.r * 255.0).round();
+    final int g = (color.g * 255.0).round();
+    final int b = (color.b * 255.0).round();
 
     for (int i = 1; i < 10; i++) {
       strengths.add(0.1 * i);
     }
+    
     for (var strength in strengths) {
       final double ds = 0.5 - strength;
       swatch[(strength * 1000).round()] = Color.fromRGBO(
@@ -223,6 +228,8 @@ class AppTheme {
         1,
       );
     }
-    return MaterialColor(color.value, swatch);
+    
+    // Updated to use toARGB32() instead of the deprecated value property
+    return MaterialColor(color.toARGB32(), swatch);
   }
 }

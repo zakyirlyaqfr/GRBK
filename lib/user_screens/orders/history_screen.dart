@@ -19,7 +19,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final PocketBaseService _pocketbaseService = PocketBaseService();
   final ProductService _productService = ProductService();
   List<OrderModel> _userOrders = [];
-  Map<String, ProductModel> _productCache = {};
+  final Map<String, ProductModel> _productCache = {}; // ✅ final
   bool _isLoading = false;
 
   @override
@@ -41,7 +41,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
         _userOrders = orderProvider.orders;
 
-        // Step 1: Kumpulkan semua product_id unik
         final productIds = <String>{};
         for (final order in _userOrders) {
           final items = order.items['items'] as List<dynamic>? ?? [];
@@ -51,7 +50,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
           }
         }
 
-        // Step 2: Fetch detail produk dan simpan ke cache
         for (final pid in productIds) {
           if (!_productCache.containsKey(pid)) {
             final product = await _productService.fetchProductById(pid);
@@ -362,8 +360,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // Enhanced items display with product details
                 Text(
                   'Items ($totalItems):',
                   style: GoogleFonts.oswald(
@@ -373,7 +369,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-
                 ...items.take(3).map<Widget>((item) {
                   final productName = item['product_name'] ??
                       item['productName'] ??
@@ -396,7 +391,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                     child: Row(
                       children: [
-                        // Product image
                         Builder(
                           builder: (_) {
                             final productId =
@@ -538,7 +532,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   );
                 }),
-
                 if (items.length > 3)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -553,7 +546,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
+                            // <-- Tambahkan const di sini
                             Icons.more_horiz,
                             color: AppTheme.charcoalGray,
                             size: 16,
@@ -571,7 +565,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                   ),
-
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -793,7 +786,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                     child: Row(
                       children: [
-                        // Product image
                         Builder(
                           builder: (_) {
                             final productId =
@@ -934,7 +926,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(
+                                      const Icon(
+                                        // <-- Tambahkan const di sini
                                         Icons.note_rounded,
                                         size: 14,
                                         color: AppTheme.charcoalGray,
@@ -980,6 +973,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
+                                      // ✅ const
                                       content: Text(
                                           'Added $productName to favorites'),
                                       backgroundColor: AppTheme.deepNavy,
@@ -1073,12 +1067,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   void _showReorderOptions(List<dynamic> items) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Reorder feature coming soon!'),
+      const SnackBar(
+        // ✅ const
+        content: Text('Reorder feature coming soon!'),
         backgroundColor: AppTheme.deepNavy,
       ),
     );
   }
-  // This is a placeholder for the reorder functionality.
-  // You can implement the actual reorder logic here.
 }

@@ -1089,6 +1089,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
       final payment =
           await paymentProvider.getPaymentById(_orderIdController.text.trim());
 
+      if (!mounted) return;
+
       if (payment != null && payment.status == false) {
         setState(() {
           _currentPayment = payment;
@@ -1190,7 +1192,11 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
                         final paymentToProcess = _currentPayment!;
 
-                        // Log the confirmation process
+                        // ✅ Simpan semua provider reference SEBELUM async gap
+                        final paymentProvider = context.read<PaymentProvider>();
+                        final orderProvider = context.read<OrderProvider>();
+                        final cartProvider = context.read<CartProvider>();
+
                         DebugService.logPaymentToOrderFlow(
                           step: 'CASHIER_CONFIRMATION_START',
                           data: {
@@ -1209,9 +1215,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                         });
 
                         try {
-                          // Update payment status to confirmed
-                          final success = await context
-                              .read<PaymentProvider>()
+                          // ✅ Gunakan paymentProvider (bukan context.read) setelah await
+                          final success = await paymentProvider
                               .updatePaymentStatus(paymentToProcess.id, true);
 
                           if (success) {
@@ -1223,7 +1228,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                               },
                             );
 
-                            // Create order from payment when status becomes true
                             final orderItems = {
                               'items': paymentToProcess.items
                                   .map((item) => item.toJson())
@@ -1241,7 +1245,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                               },
                             );
 
-                            final order = await context.read<OrderProvider>().createOrder(
+                            // ✅ Gunakan orderProvider (bukan context.read) setelah await
+                            final order = await orderProvider.createOrder(
                               usersId: paymentToProcess.userId,
                               paymentId: paymentToProcess.id,
                               items: orderItems,
@@ -1257,13 +1262,14 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                                 },
                               );
 
-                              // Clear cart items for this payment
-                              await context
-                                  .read<CartProvider>()
-                                  .clearCartForPayment(paymentToProcess.userId);
+                              // ✅ Gunakan cartProvider (bukan context.read) setelah await
+                              await cartProvider.clearCartForPayment(
+                                  paymentToProcess.userId);
 
-                              _showSuccessSnackBar(
-                                  'Pembayaran berhasil dikonfirmasi dan order telah dibuat!');
+                              if (mounted) {
+                                _showSuccessSnackBar(
+                                    'Pembayaran berhasil dikonfirmasi dan order telah dibuat!');
+                              }
                             } else {
                               throw Exception('Order creation returned null');
                             }
