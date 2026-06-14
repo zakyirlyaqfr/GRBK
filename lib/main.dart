@@ -7,6 +7,10 @@ import 'providers/order_provider.dart';
 import 'user_screens/auth/splash_screen.dart';
 import 'utils/app_theme.dart';
 
+// 1. TAMBAHKAN IMPORT INI
+// Sesuaikan nama file dan foldernya jika berbeda di proyek Anda
+import 'user_screens/auth/login_screen.dart'; 
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -30,6 +34,13 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         home: const SplashScreen(),
         debugShowCheckedModeBanner: false,
+        
+        // 2. TAMBAHKAN PROPERTI ROUTES INI
+        routes: {
+          // Daftarkan rute login di sini. 
+          // Pastikan 'LoginScreen' sesuai dengan nama class di file login Anda
+          '/login': (context) => const LoginScreen(), 
+        },
       ),
     );
   }

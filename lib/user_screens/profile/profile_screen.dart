@@ -810,19 +810,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showLogoutDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      // Ubah nama variabel menjadi dialogContext untuk menghindari bentrok
+      builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Logout'),
         content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              // 1. Tutup dialog menggunakan dialogContext
+              Navigator.pop(dialogContext);
+
+              // 2. Lakukan proses logout
               _pocketbaseService.logout();
-              Navigator.pushReplacementNamed(context, '/login');
+
+              // 3. Pastikan widget State masih aktif sebelum navigasi
+              if (!mounted) return;
+
+              // 4. Navigasi ke login menggunakan context utama aplikasi
+              // Menggunakan pushNamedAndRemoveUntil agar tumpukan history rute (stack) terhapus
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/login',
+                (route) => false, // false berarti semua rute sebelumnya dihapus
+              );
             },
             child: const Text('Logout'),
           ),
