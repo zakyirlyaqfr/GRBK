@@ -11,3 +11,4 @@ RUN curl -L "https://github.com/pocketbase/pocketbase/releases/download/v0.28.3/
 EXPOSE 8080
 
 CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080", "--dir=/pb/pb_data"]
+# Pancing Deploy
