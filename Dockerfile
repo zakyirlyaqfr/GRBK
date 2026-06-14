@@ -4,7 +4,7 @@ FROM alpine:latest
 RUN apk add --no-cache unzip ca-certificates curl
 
 # Tentukan versi PocketBase (Silakan cek versi terbaru di GitHub PocketBase)
-ARG PB_VERSION=0.22.13
+ARG PB_VERSION=0.28.3
 
 # Download dan ekstrak PocketBase
 RUN curl -L "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip" -o /tmp/pb.zip && \
