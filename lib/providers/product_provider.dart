@@ -5,7 +5,7 @@ import '../services/product_services.dart';
 
 class ProductProvider extends ChangeNotifier {
   final ProductService _productService = ProductService();
-  
+
   List<ProductModel> _products = [];
   bool _isLoading = false;
   String? _error;
@@ -21,11 +21,11 @@ class ProductProvider extends ChangeNotifier {
   }
 
   // Get available products
-  List<ProductModel> get availableProducts => 
+  List<ProductModel> get availableProducts =>
       _products.where((product) => product.stock).toList();
 
   // Get unavailable products
-  List<ProductModel> get unavailableProducts => 
+  List<ProductModel> get unavailableProducts =>
       _products.where((product) => !product.stock).toList();
 
   // Get product statistics
@@ -57,7 +57,7 @@ class ProductProvider extends ChangeNotifier {
     required String category,
     required String description,
     File? imageFile,
-    String? webImageData, // Add this parameter
+    String? webImageData,
     bool stock = true,
   }) async {
     _setLoading(true);
@@ -65,7 +65,7 @@ class ProductProvider extends ChangeNotifier {
       debugPrint('Creating product: $name');
       debugPrint('Has image file: ${imageFile != null}');
       debugPrint('Has web image data: ${webImageData != null && webImageData.isNotEmpty}');
-      
+
       await _productService.createProduct(
         name: name,
         price: price,
@@ -75,7 +75,7 @@ class ProductProvider extends ChangeNotifier {
         webImageData: webImageData,
       );
 
-      await loadProducts(); // Reload products
+      await loadProducts();
       _error = null;
       debugPrint('Product created successfully');
       return true;
@@ -96,7 +96,7 @@ class ProductProvider extends ChangeNotifier {
     required String category,
     required String description,
     File? imageFile,
-    String? webImageData, // Add this parameter
+    String? webImageData,
     bool? stock,
   }) async {
     _setLoading(true);
@@ -104,7 +104,7 @@ class ProductProvider extends ChangeNotifier {
       debugPrint('Updating product: $id');
       debugPrint('Has image file: ${imageFile != null}');
       debugPrint('Has web image data: ${webImageData != null && webImageData.isNotEmpty}');
-      
+
       await _productService.updateProduct(
         id: id,
         name: name,
@@ -115,7 +115,7 @@ class ProductProvider extends ChangeNotifier {
         webImageData: webImageData,
       );
 
-      await loadProducts(); // Reload products
+      await loadProducts();
       _error = null;
       debugPrint('Product updated successfully');
       return true;
@@ -134,7 +134,6 @@ class ProductProvider extends ChangeNotifier {
       final result = await _productService.updateProductStock(id, stock);
 
       if (result['success']) {
-        // Update local state immediately for better UX
         final index = _products.indexWhere((p) => p.id == id);
         if (index != -1) {
           _products[index] = _products[index].copyWith(stock: stock);
@@ -160,7 +159,7 @@ class ProductProvider extends ChangeNotifier {
       final success = await _productService.deleteProduct(id);
 
       if (success) {
-        await loadProducts(); // Reload products
+        await loadProducts();
         _error = null;
         return true;
       } else {
@@ -183,16 +182,16 @@ class ProductProvider extends ChangeNotifier {
 
   // Get image URL from path
   String getImageUrlFromPath(String imagePath) {
-    const String baseUrl = 'http://127.0.0.1:8090';
-    
+    const String baseUrl = 'https://grbk-production.up.railway.app';
+
     if (imagePath.startsWith('http')) {
       return imagePath;
     }
-    
+
     if (imagePath.isEmpty) {
       return '';
     }
-    
+
     return '$baseUrl/api/files/products/$imagePath';
   }
 

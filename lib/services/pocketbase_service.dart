@@ -8,7 +8,7 @@ import 'package:pocketbase/pocketbase.dart';
 import '../models/user_model.dart';
 
 class PocketBaseService {
-  static const String baseUrl = 'http://127.0.0.1:8090';
+  static const String baseUrl = 'https://grbk-production.up.railway.app';
   static const String apiUrl = '$baseUrl/api';
 
   String? _authToken;

@@ -2,7 +2,7 @@ class UserModel {
   final String id;
   final String name;
   final String email;
-  final String? avatar; // Add avatar field
+  final String? avatar;
   final bool admin;
   final DateTime created;
   final DateTime updated;
@@ -22,7 +22,7 @@ class UserModel {
       id: json['id'] ?? '',
       name: json['name'] ?? '',
       email: json['email'] ?? '',
-      avatar: json['avatar'], // Handle avatar field
+      avatar: json['avatar'],
       admin: json['admin'] ?? false,
       created: DateTime.parse(json['created'] ?? DateTime.now().toIso8601String()),
       updated: DateTime.parse(json['updated'] ?? DateTime.now().toIso8601String()),
@@ -66,6 +66,6 @@ class UserModel {
     if (avatar == null || avatar!.isEmpty) {
       return '';
     }
-    return 'http://127.0.0.1:8090/api/files/users/$id/$avatar';
+    return 'https://grbk-production.up.railway.app/api/files/users/$id/$avatar';
   }
 }

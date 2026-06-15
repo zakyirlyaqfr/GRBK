@@ -6,7 +6,7 @@ import 'package:http_parser/http_parser.dart';
 import '../models/product_model.dart';
 
 class ProductService {
-  static const String baseUrl = 'http://127.0.0.1:8090/api';
+  static const String baseUrl = 'https://grbk-production.up.railway.app/api';
   static const String collection = 'products';
 
   // Test connection to PocketBase
@@ -73,30 +73,27 @@ class ProductService {
 
       // Handle image upload
       if (imageFile != null && !kIsWeb) {
-        // Mobile/Desktop platform
         debugPrint('Adding mobile image file: ${imageFile.path}');
         var multipartFile = await http.MultipartFile.fromPath(
-          'image', // Make sure this matches your PocketBase schema field name
+          'image',
           imageFile.path,
           contentType: MediaType('image', 'jpeg'),
         );
         request.files.add(multipartFile);
         debugPrint('Mobile image file added successfully');
       } else if (webImageData != null && webImageData.isNotEmpty && kIsWeb) {
-        // Web platform
         debugPrint('Processing web image data');
         try {
-          // Extract base64 data from data URL
           final RegExp regex = RegExp(r'data:image/([^;]+);base64,');
           final match = regex.firstMatch(webImageData);
-          
+
           if (match != null) {
             final String imageType = match.group(1) ?? 'png';
             final String base64Str = webImageData.replaceAll(regex, '');
             final bytes = base64Decode(base64Str);
-            
+
             final multipartFile = http.MultipartFile.fromBytes(
-              'image', // Make sure this matches your PocketBase schema field name
+              'image',
               bytes,
               filename: 'product_${DateTime.now().millisecondsSinceEpoch}.$imageType',
               contentType: MediaType('image', imageType),
@@ -115,14 +112,13 @@ class ProductService {
       debugPrint('Request fields: ${request.fields}');
       debugPrint('Request files: ${request.files.length}');
 
-      // Send request with timeout
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 30),
         onTimeout: () {
           throw Exception('Request timeout - please check your connection');
         },
       );
-      
+
       final response = await http.Response.fromStream(streamedResponse);
 
       debugPrint('Response status: ${response.statusCode}');
@@ -133,19 +129,17 @@ class ProductService {
         debugPrint('Product created successfully with image: ${data['image']}');
         return ProductModel.fromJson(data);
       } else {
-        // Enhanced error handling
         try {
           final errorData = jsonDecode(response.body);
           debugPrint('Error details: $errorData');
-          
-          // Check for specific field errors
+
           if (errorData['data'] != null) {
             final fieldErrors = errorData['data'] as Map<String, dynamic>;
             if (fieldErrors['image'] != null) {
               throw Exception('Image upload error: ${fieldErrors['image']['message']}');
             }
           }
-          
+
           throw Exception('Failed to create product: ${response.statusCode} - ${errorData['message'] ?? 'Unknown error'}');
         } catch (e) {
           if (e.toString().contains('Image upload error')) rethrow;
@@ -174,13 +168,11 @@ class ProductService {
         Uri.parse('$baseUrl/collections/$collection/records/$id'),
       );
 
-      // Add text fields
       request.fields['name'] = name;
       request.fields['price'] = price.toString();
       request.fields['category'] = category;
       request.fields['description'] = description;
 
-      // Handle image upload (same logic as create)
       if (imageFile != null && !kIsWeb) {
         var multipartFile = await http.MultipartFile.fromPath(
           'image',
@@ -193,12 +185,12 @@ class ProductService {
         try {
           final RegExp regex = RegExp(r'data:image/([^;]+);base64,');
           final match = regex.firstMatch(webImageData);
-          
+
           if (match != null) {
             final String imageType = match.group(1) ?? 'png';
             final String base64Str = webImageData.replaceAll(regex, '');
             final bytes = base64Decode(base64Str);
-            
+
             final multipartFile = http.MultipartFile.fromBytes(
               'image',
               bytes,
@@ -283,7 +275,7 @@ class ProductService {
     if (product.image == null || product.image!.isEmpty) {
       return '';
     }
-    
+
     // PocketBase file URL format
     return '$baseUrl/files/$collection/${product.id}/${product.image}';
   }
@@ -316,7 +308,7 @@ class ProductService {
       final products = await getAllProducts();
       final available = products.where((p) => p.stock).length;
       final unavailable = products.where((p) => !p.stock).length;
-      
+
       return {
         'total': products.length,
         'available': available,

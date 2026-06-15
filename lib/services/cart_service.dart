@@ -5,9 +5,9 @@ import 'pocketbase_service.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 class CartService {
-  static const String baseUrl = 'http://127.0.0.1:8090'; // Replace with your PocketBase URL
+  static const String baseUrl = 'https://grbk-production.up.railway.app';
   static const String collection = 'cart';
-  
+
   // Get PocketBase service instance
   static final PocketBaseService _pocketBaseService = PocketBaseService();
 
@@ -16,9 +16,9 @@ class CartService {
     if (!_pocketBaseService.isAuthenticated || _pocketBaseService.currentUser == null) {
       throw Exception('User not authenticated. Please login first.');
     }
-    
+
     final userId = _pocketBaseService.currentUser!.id;
-    
+
     // Verify user exists in database
     try {
       final response = await http.get(
@@ -28,7 +28,7 @@ class CartService {
           'Authorization': 'Bearer ${_pocketBaseService.authToken}',
         },
       );
-      
+
       if (response.statusCode == 200) {
         return userId;
       } else {
@@ -43,7 +43,7 @@ class CartService {
   static Map<String, String> _getAuthHeaders() {
     return {
       'Content-Type': 'application/json',
-      if (_pocketBaseService.authToken != null) 
+      if (_pocketBaseService.authToken != null)
         'Authorization': 'Bearer ${_pocketBaseService.authToken}',
     };
   }
@@ -64,7 +64,7 @@ class CartService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> items = data['items'] ?? [];
-        
+
         return items.map((item) => CartModel.fromJson(item)).toList();
       } else {
         debugPrint('Error details: ${response.body}');
@@ -82,7 +82,7 @@ class CartService {
         Uri.parse('$baseUrl/api/collections/products/records/$productId'),
         headers: _getAuthHeaders(),
       );
-      
+
       return response.statusCode == 200;
     } catch (e) {
       return false;
@@ -112,9 +112,9 @@ class CartService {
 
       // Check if item already exists in cart
       final existingItems = await getCartItems();
-      final existingItem = existingItems.where((item) => 
-        item.productsId == productId && 
-        item.temperature == temperature && 
+      final existingItem = existingItems.where((item) =>
+        item.productsId == productId &&
+        item.temperature == temperature &&
         item.sweetness == sweetness &&
         item.specialNotes == specialNotes
       ).firstOrNull;
@@ -122,7 +122,7 @@ class CartService {
       if (existingItem != null) {
         // Update existing item quantity
         return await updateCartItem(
-          existingItem.id, 
+          existingItem.id,
           existingItem.quantity + quantity
         );
       } else {
@@ -136,7 +136,7 @@ class CartService {
           'special_notes': specialNotes,
         };
 
-        debugPrint('Creating cart item with data: $cartData'); // Debug log
+        debugPrint('Creating cart item with data: $cartData');
 
         final response = await http.post(
           Uri.parse('$baseUrl/api/collections/$collection/records'),
@@ -146,7 +146,7 @@ class CartService {
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
-          
+
           // Fetch the created item with expanded product details
           final expandedResponse = await http.get(
             Uri.parse('$baseUrl/api/collections/$collection/records/${data['id']}?expand=products_id'),
@@ -186,7 +186,7 @@ class CartService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         // Fetch updated item with expanded product details
         final expandedResponse = await http.get(
           Uri.parse('$baseUrl/api/collections/$collection/records/$cartId?expand=products_id'),
@@ -233,7 +233,7 @@ class CartService {
   static Future<void> clearCart() async {
     try {
       final cartItems = await getCartItems();
-      
+
       for (final item in cartItems) {
         await removeFromCart(item.id);
       }

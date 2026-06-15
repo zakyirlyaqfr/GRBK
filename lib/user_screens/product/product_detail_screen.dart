@@ -107,71 +107,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                 ),
               ),
             ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.richBlack.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    IconButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const CartScreen()),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.shopping_cart_rounded,
-                        color: AppTheme.deepNavy,
-                      ),
-                    ),
-                    // Cart badge
-                    Consumer<CartProvider>(
-                      builder: (context, cartProvider, child) {
-                        if (cartProvider.totalItems > 0) {
-                          return Positioned(
-                            right: 6,
-                            top: 6,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 16,
-                                minHeight: 16,
-                              ),
-                              child: Text(
-                                '${cartProvider.totalItems}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
           SliverToBoxAdapter(
             child: FadeTransition(
@@ -184,7 +119,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
           ),
         ],
       ),
-      bottomNavigationBar: _buildEnhancedBottomBar(),
+      // PERBAIKAN: Menumpuk Persistent Cart Bar dan tombol Add to Cart
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildPersistentCartBar(context),
+          _buildEnhancedBottomBar(),
+        ],
+      ),
     );
   }
 
@@ -313,15 +255,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             _buildProductHeader(),
             const SizedBox(height: 20),
             _buildDescriptionSection(),
-            const SizedBox(height: 16), // Reduced from 20
+            const SizedBox(height: 16),
             _buildTemperatureSection(),
             const SizedBox(height: 18),
             _buildSweetnessSection(),
             const SizedBox(height: 18),
             _buildSpecialNotesSection(),
-            const SizedBox(height: 16), // Reduced from 20
+            const SizedBox(height: 16),
             _buildQuantitySection(),
-            const SizedBox(height: 24), // Reduced from 80
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -785,6 +727,97 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     );
   }
 
+  // PERBAIKAN: Widget Persistent Cart Bar (akan muncul jika keranjang tidak kosong)
+  Widget _buildPersistentCartBar(BuildContext context) {
+    return Consumer<CartProvider>(
+      builder: (context, cartProvider, child) {
+        if (cartProvider.cartItems.isEmpty) {
+          return const SizedBox.shrink(); // Hilang otomatis jika keranjang kosong
+        }
+        return Container(
+          margin: const EdgeInsets.only(left: 16, right: 16, top: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.green,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withValues(alpha: 0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.shopping_cart_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${cartProvider.totalItems} Items in Cart',
+                      style: GoogleFonts.oswald(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Total: Rp ${cartProvider.totalCartValue}',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CartScreen()),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.green,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: Text(
+                  'View Cart',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildEnhancedBottomBar() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -829,8 +862,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                 child: Consumer<CartProvider>(
                   builder: (context, cartProvider, child) {
                     return ElevatedButton(
-                      onPressed: _isAvailable && !cartProvider.isLoading 
-                          ? _addToCart 
+                      onPressed: _isAvailable && !cartProvider.isLoading
+                          ? _addToCart
                           : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
@@ -853,14 +886,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                               children: [
                                 Icon(
                                   _isAvailable
-                                      ? Icons.shopping_cart_rounded
+                                      ? Icons.add_shopping_cart_rounded
                                       : Icons.block_rounded,
                                   color: Colors.white,
                                   size: 24,
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  _isAvailable ? 'Add to Cart' : 'Not Available',
+                                  _isAvailable
+                                      ? 'Add to Cart'
+                                      : 'Not Available',
                                   style: GoogleFonts.oswald(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -885,7 +920,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     if (!_isAvailable) return;
 
     final cartProvider = context.read<CartProvider>();
-  
+
     try {
       await cartProvider.addToCart(
         productId: widget.product.id,
@@ -897,12 +932,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
       if (mounted) {
         if (cartProvider.error != null) {
-          // Show error message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                  const Icon(Icons.error_outline,
+                      color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -919,81 +954,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
               ),
               margin: const EdgeInsets.all(16),
               duration: const Duration(seconds: 3),
-              action: SnackBarAction(
-                label: 'Dismiss',
-                textColor: Colors.white,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                },
-              ),
-            ),
-          );
-        } else {
-          // Show success notification
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.check_circle,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Item added to cart',
-                          style: GoogleFonts.oswald(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(
-                          '${widget.product.name} (${_quantity}x)',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              margin: const EdgeInsets.all(16),
-              duration: const Duration(seconds: 2),
-              action: SnackBarAction(
-                label: 'View Cart',
-                textColor: Colors.white,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CartScreen(),
-                    ),
-                  );
-                },
-              ),
             ),
           );
         }
+        // PERBAIKAN: Blok else (sukses masuk ke keranjang) tidak perlu SnackBar lagi 
+        // karena widget _buildPersistentCartBar akan langsung muncul secara otomatis.
       }
     } catch (e) {
       if (mounted) {

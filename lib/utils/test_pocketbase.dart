@@ -1,41 +1,34 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-// import 'dart:convert';
 import '../services/pocketbase_service.dart';
 import '../services/payment_service.dart';
 import '../models/cart_model.dart';
 
 class TestPocketBase {
-  static const String baseUrl = 'http://127.0.0.1:8090';
-  
+  static const String baseUrl = 'https://grbk-production.up.railway.app';
+
   static Future<void> runTests() async {
     debugPrint('🧪 Running PocketBase Tests...');
-    
-    // Test 1: Basic connection
+
     await _testBasicConnection();
-    
-    // Test 2: List users
     await _testListUsers();
-    
-    // Test 3: Get or create test user
     final userId = await _testGetOrCreateUser();
-    
-    // Test 4: Create a test payment with proper user ID
+
     if (userId != null) {
       await _testCreatePaymentWithValidUser(userId);
     }
-    
+
     debugPrint('🧪 Tests completed');
   }
-  
+
   static Future<void> _testBasicConnection() async {
     try {
       debugPrint('Test 1: Basic connection');
-      
+
       final response = await http.get(
         Uri.parse('$baseUrl/api/health'),
       );
-      
+
       if (response.statusCode == 200) {
         debugPrint('✅ Connection successful');
       } else {
@@ -45,14 +38,14 @@ class TestPocketBase {
       debugPrint('❌ Connection error: $e');
     }
   }
-  
+
   static Future<void> _testListUsers() async {
     try {
       debugPrint('Test 2: List existing users');
 
       final userService = PocketBaseService();
       final users = await userService.getUsers();
-      
+
       if (users.isNotEmpty) {
         debugPrint('✅ Found ${users.length} users');
       } else {
@@ -62,14 +55,12 @@ class TestPocketBase {
       debugPrint('❌ Error listing users: $e');
     }
   }
-  
+
   static Future<String?> _testGetOrCreateUser() async {
     try {
       debugPrint('Test 3: Get or create test user');
 
       final userService = PocketBaseService();
-      // You must implement or use a method that returns a user ID.
-      // For example, if you have getOrCreateTestUser():
       final userId = await userService.getOrCreateTestUser();
 
       if (userId != null) {
@@ -84,12 +75,11 @@ class TestPocketBase {
       return null;
     }
   }
-  
+
   static Future<void> _testCreatePaymentWithValidUser(String userId) async {
     try {
       debugPrint('Test 4: Create test payment with valid user');
-      
-      // Create mock cart items with the valid user ID
+
       final mockCartItems = [
         CartModel(
           id: 'mock_cart_1',
@@ -118,12 +108,12 @@ class TestPocketBase {
           updated: DateTime.now(),
         ),
       ];
-      
+
       final paymentService = PaymentService();
       final payment = await paymentService.createPaymentFromCart(
         cartItems: mockCartItems,
       );
-      
+
       if (payment != null) {
         debugPrint('✅ Payment creation successful');
         debugPrint('Created payment ID: ${payment.id}');
