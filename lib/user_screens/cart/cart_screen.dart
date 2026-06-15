@@ -72,8 +72,9 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // PERBAIKAN: QR sekarang hanya berisi # diikuti 15 karakter ID
   String _generatePaymentQRData(String paymentId) {
-    return paymentId;
+    return '#$paymentId';
   }
 
   void _startPaymentStatusCheck(String paymentId) {
@@ -283,7 +284,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
           ],
         ),
       ),
-      // PERBAIKAN: Stack bottom bar untuk memasukkan Persistent Cart Bar juga di Cart
       bottomNavigationBar: Consumer<CartProvider>(
         builder: (context, cartProvider, child) {
           if (cartProvider.cartItems.isEmpty || cartProvider.isLoading) {
@@ -800,7 +800,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
     );
   }
 
-  // PERBAIKAN: Widget Persistent Cart Bar (akan muncul jika keranjang tidak kosong)
   Widget _buildPersistentCartBar(BuildContext context) {
     return Consumer<CartProvider>(
       builder: (context, cartProvider, child) {
@@ -860,7 +859,6 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              // Tombol View Cart disembunyikan jika sedang berada di halaman Cart
             ],
           ),
         );
@@ -1387,6 +1385,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    // PERBAIKAN: Hanya menampilkan # dan 15 ID Payment Asli
                     Container(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1395,7 +1394,7 @@ class _CartScreenState extends State<CartScreen> with TickerProviderStateMixin {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'Order #GRBK${payment.id.substring(0, 4).toUpperCase()}',
+                        '#${payment.id}',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,

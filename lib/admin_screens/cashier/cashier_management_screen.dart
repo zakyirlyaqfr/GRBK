@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
-import 'package:camera/camera.dart';
+import 'package:mobile_scanner/mobile_scanner.dart'; // PACKAGE BARU
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../../utils/app_theme.dart';
@@ -25,8 +25,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
   bool _isStarted = false;
   bool _isScanning = false;
   bool _orderFound = false;
-  bool _isCameraInitialized = false;
-  bool _isCameraPermissionGranted = false;
   final bool _isWebPlatform = kIsWeb;
 
   final TextEditingController _orderIdController = TextEditingController();
@@ -34,11 +32,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
-  CameraController? _cameraController;
-  List<CameraDescription> _cameras = [];
-  
-  // PERBAIKAN: Menyimpan index kamera yang sedang digunakan
-  int _currentCameraIndex = 0;
+  // PERBAIKAN: Menggunakan MobileScannerController agar bisa membaca QR
+  late MobileScannerController _scannerController;
 
   PaymentModel? _currentPayment;
 
@@ -57,92 +52,29 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
       curve: Curves.easeInOut,
     ));
 
-    _checkCameraPermission();
+    _scannerController = MobileScannerController(
+      facing: CameraFacing.back,
+      detectionSpeed: DetectionSpeed.noDuplicates,
+    );
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _orderIdController.dispose();
-    _cameraController?.dispose();
+    _scannerController.dispose();
     super.dispose();
   }
 
-  Future<void> _checkCameraPermission() async {
-    if (_isWebPlatform) {
-      setState(() {
-        _isCameraPermissionGranted = true;
-      });
-    } else {
-      final status = await Permission.camera.status;
-      setState(() {
-        _isCameraPermissionGranted = status.isGranted;
-      });
-    }
-  }
-
   Future<void> _requestCameraPermission() async {
-    if (_isWebPlatform) {
-      _initializeCamera();
-    } else {
+    if (!_isWebPlatform) {
       final status = await Permission.camera.request();
-      setState(() {
-        _isCameraPermissionGranted = status.isGranted;
-      });
-
-      if (status.isGranted) {
-        _initializeCamera();
-      } else {
+      if (!status.isGranted) {
         _showPermissionDeniedDialog();
+        return;
       }
     }
-  }
-
-  Future<void> _initializeCamera() async {
-    try {
-      _cameras = await availableCameras();
-      if (_cameras.isNotEmpty) {
-        // Memastikan index kamera tidak melebihi jumlah kamera yang tersedia
-        if (_currentCameraIndex >= _cameras.length) {
-          _currentCameraIndex = 0;
-        }
-
-        _cameraController = CameraController(
-          _cameras[_currentCameraIndex],
-          _isWebPlatform ? ResolutionPreset.high : ResolutionPreset.medium,
-          enableAudio: false,
-        );
-
-        await _cameraController!.initialize();
-        if (mounted) {
-          setState(() {
-            _isCameraInitialized = true;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error initializing camera: $e');
-      if (mounted) {
-        if (_isWebPlatform && e.toString().contains('NotAllowedError')) {
-          _showWebPermissionDeniedDialog();
-        } else {
-          _showErrorSnackBar('Gagal menginisialisasi kamera: ${e.toString()}');
-        }
-      }
-    }
-  }
-
-  // PERBAIKAN: Fungsi untuk mengganti kamera (Depan <-> Belakang)
-  Future<void> _switchCamera() async {
-    if (_cameras.length <= 1) return; // Tidak bisa diganti jika hanya ada 1 kamera
-
-    setState(() {
-      _isCameraInitialized = false; // Sembunyikan kamera sementara saat memuat ulang
-    });
-
-    await _cameraController?.dispose();
-    _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
-    await _initializeCamera();
+    _startScanning();
   }
 
   void _showPermissionDeniedDialog() {
@@ -190,46 +122,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
               _isWebPlatform ? 'OK' : 'Buka Pengaturan',
               style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showWebPermissionDeniedDialog() {
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Akses Kamera Ditolak',
-          style: GoogleFonts.oswald(
-            fontWeight: FontWeight.bold,
-            color: AppTheme.deepNavy,
-          ),
-        ),
-        content: Text(
-          'Browser Anda menolak akses kamera. Silakan:\n\n'
-          '1. Klik ikon kamera di address bar\n'
-          '2. Pilih "Allow" untuk mengizinkan akses kamera\n'
-          '3. Refresh halaman dan coba lagi\n\n'
-          'Atau gunakan input manual untuk memasukkan Order ID.',
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: AppTheme.charcoalGray,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Mengerti',
-              style: GoogleFonts.poppins(
-                color: AppTheme.deepNavy,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -564,7 +456,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
           SizedBox(height: isVerySmallScreen ? 16 : 20),
 
-          if (_isScanning && _isCameraInitialized && _cameraController != null)
+          // Tampilan Kamera Aktif
+          if (_isScanning)
             Container(
               height: 240, 
               width: double.infinity,
@@ -574,33 +467,43 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    AspectRatio(
-                      aspectRatio: _isWebPlatform
-                          ? 16 / 9
-                          : _cameraController!.value.aspectRatio,
-                      child: CameraPreview(_cameraController!),
+                    MobileScanner(
+                      controller: _scannerController,
+                      onDetect: (capture) {
+                        final List<Barcode> barcodes = capture.barcodes;
+                        for (final barcode in barcodes) {
+                          if (barcode.rawValue != null) {
+                            final String code = barcode.rawValue!;
+                            // Langsung proses pencarian otomatis
+                            setState(() {
+                              _orderIdController.text = code;
+                            });
+                            _stopScanning();
+                            _searchOrder();
+                            break; 
+                          }
+                        }
+                      },
                     ),
-                    // PERBAIKAN: Tombol untuk melakukan putar (flip) kamera
-                    if (_cameras.length > 1)
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.flip_camera_ios_rounded, 
+                            color: Colors.white,
+                            size: 24,
                           ),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.flip_camera_ios_rounded, 
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            onPressed: _switchCamera,
-                            tooltip: 'Ganti Kamera',
-                          ),
+                          onPressed: () => _scannerController.switchCamera(),
+                          tooltip: 'Ganti Kamera',
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -617,7 +520,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
               borderRadius: BorderRadius.circular(10),
             ),
             child: ElevatedButton(
-              onPressed: _isScanning ? _stopScanning : _startScanning,
+              onPressed: _isScanning ? _stopScanning : _requestCameraPermission,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
@@ -708,7 +611,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
             SizedBox(height: isVerySmallScreen ? 6 : 8),
 
             Text(
-              'Masukkan ID pesanan secara manual jika QR code tidak dapat dipindai atau kamera tidak tersedia',
+              'Masukkan ID pesanan secara manual jika QR code tidak dapat dipindai',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: isVerySmallScreen ? 11 : 12,
@@ -728,7 +631,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
               ),
               decoration: InputDecoration(
                 labelText: 'Payment ID',
-                hintText: 'Masukkan Payment ID',
+                hintText: '#60o11zq6a992qmo',
                 labelStyle: GoogleFonts.poppins(
                     color: AppTheme.charcoalGray,
                     fontSize: isVerySmallScreen ? 11 : 12),
@@ -1057,13 +960,17 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                       size: isVerySmallScreen ? 20 : 24,
                     ),
                     SizedBox(width: isVerySmallScreen ? 8 : 10),
-                    Text(
-                      'Konfirmasi Pembayaran',
-                      style: GoogleFonts.oswald(
-                        fontSize: isVerySmallScreen ? 14 : 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
+                    Flexible(
+                      child: Text(
+                        'Konfirmasi Pembayaran',
+                        style: GoogleFonts.oswald(
+                          fontSize: isVerySmallScreen ? 14 : 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -1077,59 +984,54 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
   }
 
   void _startScanning() {
-    if (!_isCameraPermissionGranted) {
-      _requestCameraPermission();
-      return;
-    }
-
     setState(() {
       _isScanning = true;
     });
-
-    if (_isCameraInitialized) {
-      _pulseController.repeat(reverse: true);
-    } else {
-      _initializeCamera().then((_) {
-        if (_isCameraInitialized && mounted) {
-          _pulseController.repeat(reverse: true);
-        } else {
-          if (mounted) {
-            setState(() {
-              _isScanning = false;
-            });
-            _showErrorSnackBar('Gagal menginisialisasi kamera');
-          }
-        }
-      });
-    }
+    _scannerController.start();
+    _pulseController.repeat(reverse: true);
   }
 
   void _stopScanning() {
     setState(() {
       _isScanning = false;
     });
+    _scannerController.stop();
     _pulseController.stop();
   }
 
+  // PERBAIKAN: Fungsi Auto-Cleaner untuk Input Manual
   void _searchOrder() async {
-    if (_orderIdController.text.isNotEmpty) {
-      final paymentProvider = context.read<PaymentProvider>();
-      final payment =
-          await paymentProvider.getPaymentById(_orderIdController.text.trim());
+    String rawInput = _orderIdController.text.trim();
 
-      if (!mounted) return;
+    // Membersihkan teks dari karakter '#', spasi, dan tulisan yang tidak perlu
+    String cleanId = rawInput.replaceAll('#', '').trim();
+    cleanId = cleanId.replaceAll(RegExp(r'Order\s*#?GRBK', caseSensitive: false), '');
+    cleanId = cleanId.replaceAll(RegExp(r'Order\s*#?', caseSensitive: false), '').trim();
 
-      if (payment != null && payment.status == false) {
-        setState(() {
-          _currentPayment = payment;
-          _orderFound = true;
-        });
-      } else {
-        _showErrorSnackBar(
-            'Payment tidak ditemukan atau sudah dikonfirmasi. Periksa kembali Payment ID.');
-      }
-    } else {
+    if (cleanId.isEmpty) {
       _showErrorSnackBar('Masukkan Payment ID terlebih dahulu');
+      return;
+    }
+
+    // Memastikan ID PocketBase berisikan tepat 15 karakter
+    if (cleanId.length != 15) {
+      _showErrorSnackBar('ID PocketBase harus 15 karakter. Anda memasukkan ${cleanId.length} karakter.');
+      return;
+    }
+
+    final paymentProvider = context.read<PaymentProvider>();
+    final payment = await paymentProvider.getPaymentById(cleanId);
+
+    if (!mounted) return;
+
+    if (payment != null && payment.status == false) {
+      setState(() {
+        _currentPayment = payment;
+        _orderFound = true;
+      });
+    } else {
+      _showErrorSnackBar(
+          'Payment tidak ditemukan atau sudah dikonfirmasi. Periksa kembali Payment ID.');
     }
   }
 
@@ -1290,16 +1192,21 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
+                        // PERBAIKAN: Padding dikurangi agar tidak makan ruang
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 10),
+                            horizontal: 4, vertical: 10),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: Text(
-                        'Konfirmasi',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+                      // PERBAIKAN: Dibungkus dengan FittedBox agar huruf mengecil otomatis jika ruang sempit
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Konfirmasi',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
