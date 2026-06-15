@@ -170,8 +170,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(20),
+                              // PERBAIKAN: Menambahkan assets/
                               child: Image.asset(
-                                'images/grbk_logo.png',
+                                'assets/images/grbk_logo.png',
                                 fit: BoxFit.contain,
                                 errorBuilder: (context, error, stackTrace) {
                                   return const Icon(

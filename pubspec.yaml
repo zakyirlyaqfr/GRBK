@@ -54,8 +54,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   
-  # Add assets when ready
-  # assets:
-  #   - assets/images/
-  #   - assets/icons/
-  #   - assets/animations/
+  # Aset gambar sekarang sudah aktif!
+  assets:
+    - assets/images/
+  # - assets/icons/
+  # - assets/animations/

@@ -27,16 +27,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Map<String, String>> _bannerImages = [
     {
-      'image': 'images/banner1.jpg',
+      'image': 'assets/images/banner1.jpg',
     },
     {
-      'image': 'images/banner2.jpg',
+      'image': 'assets/images/banner2.jpg',
     },
     {
-      'image': 'images/banner3.jpg',
+      'image': 'assets/images/banner3.jpg',
     },
     {
-      'image': 'images/banner4.jpg',
+      'image': 'assets/images/banner4.jpg',
     },
   ];
 
@@ -105,7 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
           const ProfileScreen(),
         ],
       ),
-      // PERBAIKAN: Menambahkan Persistent Cart Bar di atas Bottom Nav Bar
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -164,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(25),
                         child: Image.asset(
-                          'images/grbk_splash.png',
+                          'assets/images/grbk_splash.png',
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             return const Icon(
@@ -719,12 +718,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // PERBAIKAN: Widget Persistent Cart Bar (akan muncul jika keranjang tidak kosong)
   Widget _buildPersistentCartBar(BuildContext context) {
     return Consumer<CartProvider>(
       builder: (context, cartProvider, child) {
         if (cartProvider.cartItems.isEmpty) {
-          return const SizedBox.shrink(); // Hilang jika keranjang kosong
+          return const SizedBox.shrink(); 
         }
         return Container(
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 8),
