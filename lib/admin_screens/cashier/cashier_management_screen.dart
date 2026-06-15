@@ -36,6 +36,9 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
+  
+  // PERBAIKAN: Menyimpan index kamera yang sedang digunakan
+  int _currentCameraIndex = 0;
 
   PaymentModel? _currentPayment;
 
@@ -99,8 +102,13 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
     try {
       _cameras = await availableCameras();
       if (_cameras.isNotEmpty) {
+        // Memastikan index kamera tidak melebihi jumlah kamera yang tersedia
+        if (_currentCameraIndex >= _cameras.length) {
+          _currentCameraIndex = 0;
+        }
+
         _cameraController = CameraController(
-          _cameras[0],
+          _cameras[_currentCameraIndex],
           _isWebPlatform ? ResolutionPreset.high : ResolutionPreset.medium,
           enableAudio: false,
         );
@@ -122,6 +130,19 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
         }
       }
     }
+  }
+
+  // PERBAIKAN: Fungsi untuk mengganti kamera (Depan <-> Belakang)
+  Future<void> _switchCamera() async {
+    if (_cameras.length <= 1) return; // Tidak bisa diganti jika hanya ada 1 kamera
+
+    setState(() {
+      _isCameraInitialized = false; // Sembunyikan kamera sementara saat memuat ulang
+    });
+
+    await _cameraController?.dispose();
+    _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+    await _initializeCamera();
   }
 
   void _showPermissionDeniedDialog() {
@@ -434,7 +455,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
             child: Column(
               children: [
                 SizedBox(
-                  height: 320,
+                  height: _isScanning ? 440 : 320, 
                   child: _buildScanSection(constraints),
                 ),
                 const SizedBox(height: 16),
@@ -482,42 +503,37 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: isVerySmallScreen ? 70 : 80,
-            height: isVerySmallScreen ? 70 : 80,
-            decoration: BoxDecoration(
-              gradient: _isScanning
-                  ? const LinearGradient(
-                      colors: [Colors.green, Colors.lightGreen])
-                  : AppTheme.primaryGradient,
-              borderRadius: BorderRadius.circular(40),
-              boxShadow: [
-                BoxShadow(
-                  color: (_isScanning ? Colors.green : AppTheme.deepNavy)
-                      .withValues(alpha: 0.2),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: AnimatedBuilder(
-              animation: _pulseAnimation,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: _isScanning ? _pulseAnimation.value : 1.0,
-                  child: Icon(
-                    _isScanning
-                        ? Icons.camera_alt_rounded
-                        : Icons.qr_code_scanner_rounded,
-                    color: Colors.white,
-                    size: isVerySmallScreen ? 35 : 40,
+          if (!_isScanning) ...[
+            Container(
+              width: isVerySmallScreen ? 70 : 80,
+              height: isVerySmallScreen ? 70 : 80,
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(40),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.deepNavy.withValues(alpha: 0.2),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
                   ),
-                );
-              },
+                ],
+              ),
+              child: AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _isScanning ? _pulseAnimation.value : 1.0,
+                    child: Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: Colors.white,
+                      size: isVerySmallScreen ? 35 : 40,
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-
-          SizedBox(height: isVerySmallScreen ? 12 : 16),
+            SizedBox(height: isVerySmallScreen ? 12 : 16),
+          ],
 
           Text(
             'Scan QR Code',
@@ -550,16 +566,42 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
           if (_isScanning && _isCameraInitialized && _cameraController != null)
             Container(
-              height: 120,
+              height: 240, 
               width: double.infinity,
               margin: EdgeInsets.only(bottom: isVerySmallScreen ? 12 : 16),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: _isWebPlatform
-                      ? 16 / 9
-                      : _cameraController!.value.aspectRatio,
-                  child: CameraPreview(_cameraController!),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AspectRatio(
+                      aspectRatio: _isWebPlatform
+                          ? 16 / 9
+                          : _cameraController!.value.aspectRatio,
+                      child: CameraPreview(_cameraController!),
+                    ),
+                    // PERBAIKAN: Tombol untuk melakukan putar (flip) kamera
+                    if (_cameras.length > 1)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.flip_camera_ios_rounded, 
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            onPressed: _switchCamera,
+                            tooltip: 'Ganti Kamera',
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1046,24 +1088,10 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
     if (_isCameraInitialized) {
       _pulseController.repeat(reverse: true);
-
-      Timer(const Duration(seconds: 3), () {
-        if (_isScanning && mounted) {
-          _stopScanning();
-          _simulatePaymentFound();
-        }
-      });
     } else {
       _initializeCamera().then((_) {
         if (_isCameraInitialized && mounted) {
           _pulseController.repeat(reverse: true);
-
-          Timer(const Duration(seconds: 3), () {
-            if (_isScanning && mounted) {
-              _stopScanning();
-              _simulatePaymentFound();
-            }
-          });
         } else {
           if (mounted) {
             setState(() {
@@ -1103,25 +1131,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
     } else {
       _showErrorSnackBar('Masukkan Payment ID terlebih dahulu');
     }
-  }
-
-  void _simulatePaymentFound() {
-    const String simulatedPaymentId = "sample_payment_id";
-
-    context
-        .read<PaymentProvider>()
-        .getPaymentById(simulatedPaymentId)
-        .then((payment) {
-      if (payment != null && payment.status == false && mounted) {
-        setState(() {
-          _currentPayment = payment;
-          _orderFound = true;
-        });
-      } else if (mounted) {
-        _showErrorSnackBar(
-            'Payment tidak ditemukan atau sudah dikonfirmasi. Periksa kembali Payment ID.');
-      }
-    });
   }
 
   void _confirmPayment() {
@@ -1192,7 +1201,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
 
                         final paymentToProcess = _currentPayment!;
 
-                        // ✅ Simpan semua provider reference SEBELUM async gap
                         final paymentProvider = context.read<PaymentProvider>();
                         final orderProvider = context.read<OrderProvider>();
                         final cartProvider = context.read<CartProvider>();
@@ -1215,7 +1223,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                         });
 
                         try {
-                          // ✅ Gunakan paymentProvider (bukan context.read) setelah await
                           final success = await paymentProvider
                               .updatePaymentStatus(paymentToProcess.id, true);
 
@@ -1245,7 +1252,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                               },
                             );
 
-                            // ✅ Gunakan orderProvider (bukan context.read) setelah await
                             final order = await orderProvider.createOrder(
                               usersId: paymentToProcess.userId,
                               paymentId: paymentToProcess.id,
@@ -1262,7 +1268,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen>
                                 },
                               );
 
-                              // ✅ Gunakan cartProvider (bukan context.read) setelah await
                               await cartProvider.clearCartForPayment(
                                   paymentToProcess.userId);
 

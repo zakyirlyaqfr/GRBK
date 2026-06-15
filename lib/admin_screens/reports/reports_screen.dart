@@ -26,6 +26,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<OrderModel> _orders = [];
   bool _isLoading = false;
 
+  // Filter State
+  String _filterMode = 'daily'; // 'daily' or 'monthly'
+  DateTime _selectedDate = DateTime.now();
+
+  final List<String> _monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -63,14 +72,86 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  int get _totalRevenue {
-    return _orders.fold(0, (sum, order) {
-      final totalPrice = order.items['total_price'] as int? ?? 0;
-      return sum + totalPrice;
-    });
+  // LOGIKA FILTERING DATA
+  List<OrderModel> get _filteredDailyOrders {
+    return _orders.where((o) {
+      return o.created.year == _selectedDate.year &&
+          o.created.month == _selectedDate.month &&
+          o.created.day == _selectedDate.day;
+    }).toList();
   }
 
-  int get _totalSales => _orders.length;
+  List<Map<String, dynamic>> get _monthlySummary {
+    Map<String, Map<String, dynamic>> summary = {};
+
+    for (var o in _orders) {
+      // Format key: YYYY-MM untuk sorting yang mudah
+      String monthKey = "${o.created.year}-${o.created.month.toString().padLeft(2, '0')}";
+      int price = o.items['total_price'] as int? ?? 0;
+
+      if (!summary.containsKey(monthKey)) {
+        summary[monthKey] = {
+          'monthStr': '${_monthNames[o.created.month - 1]} ${o.created.year}',
+          'revenue': 0,
+          'sales': 0,
+          'sortKey': monthKey,
+        };
+      }
+      summary[monthKey]!['revenue'] += price;
+      summary[monthKey]!['sales'] += 1;
+    }
+
+    var list = summary.values.toList();
+    // Urutkan dari bulan terbaru ke terlama
+    list.sort((a, b) => b['sortKey'].compareTo(a['sortKey']));
+    return list;
+  }
+
+  // TOTALS (Menyesuaikan dengan filter yang aktif)
+  int get _currentTotalRevenue {
+    if (_filterMode == 'daily') {
+      return _filteredDailyOrders.fold(0, (sum, order) {
+        final totalPrice = order.items['total_price'] as int? ?? 0;
+        return sum + totalPrice;
+      });
+    } else {
+      return _monthlySummary.fold(0, (sum, month) => sum + (month['revenue'] as int));
+    }
+  }
+
+  int get _currentTotalSales {
+    if (_filterMode == 'daily') {
+      return _filteredDailyOrders.length;
+    } else {
+      return _monthlySummary.fold(0, (sum, month) => sum + (month['sales'] as int));
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.deepNavy,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.deepNavy,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +163,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
             final isSmallScreen = constraints.maxWidth < 600;
             final isVerySmallScreen = constraints.maxWidth < 400;
 
-            return Container(
+            final hasDataToDisplay = _filterMode == 'daily' 
+                ? _filteredDailyOrders.isNotEmpty 
+                : _monthlySummary.isNotEmpty;
+
+            return SingleChildScrollView(
               padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,11 +198,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       Row(
                         children: [
-                          _buildExportButton('PDF',
-                              Icons.picture_as_pdf_rounded, Colors.red),
+                          _buildExportButton('PDF', Icons.picture_as_pdf_rounded, Colors.red),
                           SizedBox(width: isVerySmallScreen ? 6 : 8),
-                          _buildExportButton('Excel',
-                              Icons.table_chart_rounded, Colors.green),
+                          _buildExportButton('Excel', Icons.table_chart_rounded, Colors.green),
                           SizedBox(width: isVerySmallScreen ? 6 : 8),
                           _buildRefreshButton(),
                         ],
@@ -127,12 +210,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
                   SizedBox(height: isVerySmallScreen ? 16 : 20),
 
+                  // FILTER SECTION
+                  _buildFilterSection(isVerySmallScreen),
+
+                  SizedBox(height: isVerySmallScreen ? 16 : 20),
+
+                  // STAT CARDS
                   isSmallScreen
                       ? Column(
                           children: [
                             _buildStatCard(
                               'Total Pendapatan',
-                              'Rp ${_formatCurrency(_totalRevenue)}',
+                              'Rp ${_formatCurrency(_currentTotalRevenue)}',
                               Icons.attach_money_rounded,
                               AppTheme.primaryGradient,
                               constraints,
@@ -140,10 +229,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             SizedBox(height: isVerySmallScreen ? 8 : 10),
                             _buildStatCard(
                               'Jumlah Penjualan',
-                              '$_totalSales Pesanan',
+                              '$_currentTotalSales Pesanan',
                               Icons.receipt_long_rounded,
-                              const LinearGradient(
-                                  colors: [Colors.blue, Colors.lightBlue]),
+                              const LinearGradient(colors: [Colors.blue, Colors.lightBlue]),
                               constraints,
                             ),
                           ],
@@ -153,7 +241,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 'Total Pendapatan',
-                                'Rp ${_formatCurrency(_totalRevenue)}',
+                                'Rp ${_formatCurrency(_currentTotalRevenue)}',
                                 Icons.attach_money_rounded,
                                 AppTheme.primaryGradient,
                                 constraints,
@@ -163,12 +251,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 'Jumlah Penjualan',
-                                '$_totalSales Pesanan',
+                                '$_currentTotalSales Pesanan',
                                 Icons.receipt_long_rounded,
-                                const LinearGradient(colors: [
-                                  Colors.blue,
-                                  Colors.lightBlue
-                                ]),
+                                const LinearGradient(colors: [Colors.blue, Colors.lightBlue]),
                                 constraints,
                               ),
                             ),
@@ -177,179 +262,225 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
                   SizedBox(height: isVerySmallScreen ? 16 : 20),
 
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: isVerySmallScreen ? 10 : 12,
-                        vertical: isVerySmallScreen ? 6 : 8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warmBeige.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppTheme.warmBeige.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.receipt_long_rounded,
-                            color: AppTheme.deepNavy,
-                            size: isVerySmallScreen ? 14 : 16),
-                        SizedBox(width: isVerySmallScreen ? 6 : 8),
-                        Text(
-                          'Semua Transaksi',
-                          style: GoogleFonts.poppins(
-                            color: AppTheme.deepNavy,
-                            fontWeight: FontWeight.w600,
-                            fontSize: isVerySmallScreen ? 11 : 12,
+                  // LIST VIEW
+                  _isLoading
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32.0),
+                            child: CircularProgressIndicator(),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  SizedBox(height: isVerySmallScreen ? 12 : 16),
-
-                  Expanded(
-                    child: _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.deepNavy
-                                      .withValues(alpha: 0.1),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
+                                decoration: const BoxDecoration(
+                                  gradient: AppTheme.lightGradient,
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                 ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: EdgeInsets.all(
-                                      isVerySmallScreen ? 12 : 16),
-                                  decoration: const BoxDecoration(
-                                    gradient: AppTheme.lightGradient,
-                                    borderRadius: BorderRadius.vertical(
-                                        top: Radius.circular(16)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        flex: 2,
-                                        child: Text(
-                                          'Detail Transaksi',
-                                          style: GoogleFonts.oswald(
-                                            fontSize:
-                                                isVerySmallScreen ? 12 : 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.deepNavy,
-                                          ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        _filterMode == 'daily' ? 'Detail Transaksi' : 'Bulan',
+                                        style: GoogleFonts.oswald(
+                                          fontSize: isVerySmallScreen ? 12 : 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.deepNavy,
                                         ),
                                       ),
-                                      Expanded(
-                                        child: Text(
-                                          'Waktu',
-                                          style: GoogleFonts.oswald(
-                                            fontSize:
-                                                isVerySmallScreen ? 10 : 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.deepNavy,
-                                          ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        _filterMode == 'daily' ? 'Waktu' : 'Pesanan',
+                                        style: GoogleFonts.oswald(
+                                          fontSize: isVerySmallScreen ? 10 : 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.deepNavy,
                                         ),
                                       ),
+                                    ),
+                                    if (_filterMode == 'daily')
                                       Expanded(
                                         child: Text(
                                           'Items',
                                           style: GoogleFonts.oswald(
-                                            fontSize:
-                                                isVerySmallScreen ? 10 : 12,
+                                            fontSize: isVerySmallScreen ? 10 : 12,
                                             fontWeight: FontWeight.bold,
                                             color: AppTheme.deepNavy,
                                           ),
                                         ),
                                       ),
-                                      Expanded(
-                                        child: Text(
-                                          'Total',
-                                          style: GoogleFonts.oswald(
-                                            fontSize:
-                                                isVerySmallScreen ? 10 : 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.deepNavy,
+                                    // PERBAIKAN: Kolom Total diberi flex 2 saat mode bulanan agar tulisan harga & ikon muat
+                                    Expanded(
+                                      flex: _filterMode == 'daily' ? 1 : 2,
+                                      child: Text(
+                                        'Total',
+                                        style: GoogleFonts.oswald(
+                                          fontSize: isVerySmallScreen ? 10 : 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.deepNavy,
+                                        ),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (!hasDataToDisplay)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 40),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.receipt_long_rounded,
+                                          color: AppTheme.charcoalGray.withValues(alpha: 0.5),
+                                          size: isVerySmallScreen ? 40 : 50,
+                                        ),
+                                        SizedBox(height: isVerySmallScreen ? 8 : 12),
+                                        Text(
+                                          'Tidak ada data penjualan',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: isVerySmallScreen ? 12 : 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.charcoalGray.withValues(alpha: 0.7),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                        SizedBox(height: isVerySmallScreen ? 4 : 6),
+                                        Text(
+                                          'Belum ada transaksi di periode ini',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: isVerySmallScreen ? 10 : 12,
+                                            color: AppTheme.charcoalGray.withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                )
+                              else
+                                ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
+                                  itemCount: _filterMode == 'daily' 
+                                      ? _filteredDailyOrders.length 
+                                      : _monthlySummary.length,
+                                  itemBuilder: (context, index) {
+                                    if (_filterMode == 'daily') {
+                                      return _buildSalesRow(_filteredDailyOrders[index], index, isVerySmallScreen);
+                                    } else {
+                                      return _buildMonthlyRow(_monthlySummary[index], isVerySmallScreen);
+                                    }
+                                  },
                                 ),
-                                Expanded(
-                                  child: _orders.isEmpty
-                                      ? Center(
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                Icons.receipt_long_rounded,
-                                                color: AppTheme.charcoalGray
-                                                    .withValues(alpha: 0.5),
-                                                size: isVerySmallScreen
-                                                    ? 40
-                                                    : 50,
-                                              ),
-                                              SizedBox(
-                                                  height: isVerySmallScreen
-                                                      ? 8
-                                                      : 12),
-                                              Text(
-                                                'Tidak ada data penjualan',
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: isVerySmallScreen
-                                                      ? 12
-                                                      : 14,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppTheme.charcoalGray
-                                                      .withValues(alpha: 0.7),
-                                                ),
-                                              ),
-                                              SizedBox(
-                                                  height: isVerySmallScreen
-                                                      ? 4
-                                                      : 6),
-                                              Text(
-                                                'Belum ada transaksi yang tercatat',
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: isVerySmallScreen
-                                                      ? 10
-                                                      : 12,
-                                                  color: AppTheme.charcoalGray
-                                                      .withValues(alpha: 0.5),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : ListView.builder(
-                                          padding: EdgeInsets.all(
-                                              isVerySmallScreen ? 12 : 16),
-                                          itemCount: _orders.length,
-                                          itemBuilder: (context, index) {
-                                            final order = _orders[index];
-                                            return _buildSalesRow(
-                                                order, index, isVerySmallScreen);
-                                          },
-                                        ),
-                                ),
-                              ],
-                            ),
+                            ],
                           ),
-                  ),
+                        ),
                 ],
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterSection(bool isVerySmallScreen) {
+    return Row(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.warmBeige),
+          ),
+          child: Row(
+            children: [
+              _buildFilterTab('Harian', 'daily', isVerySmallScreen),
+              _buildFilterTab('Semua (Bulan)', 'monthly', isVerySmallScreen),
+            ],
+          ),
+        ),
+        const Spacer(),
+        if (_filterMode == 'daily')
+          InkWell(
+            onTap: () => _selectDate(context),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: isVerySmallScreen ? 12 : 16, 
+                  vertical: isVerySmallScreen ? 8 : 10),
+              decoration: BoxDecoration(
+                gradient: AppTheme.accentGradient,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.deepNavy.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_month_rounded, color: Colors.white, size: isVerySmallScreen ? 16 : 18),
+                  SizedBox(width: isVerySmallScreen ? 6 : 8),
+                  Text(
+                    '${_selectedDate.day} ${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: isVerySmallScreen ? 11 : 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFilterTab(String title, String value, bool isVerySmallScreen) {
+    bool isSelected = _filterMode == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _filterMode = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(11),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: isVerySmallScreen ? 12 : 16, 
+            vertical: isVerySmallScreen ? 8 : 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.deepNavy : Colors.transparent,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Text(
+          title,
+          style: GoogleFonts.poppins(
+            color: isSelected ? Colors.white : AppTheme.charcoalGray,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: isVerySmallScreen ? 11 : 12,
+          ),
         ),
       ),
     );
@@ -364,7 +495,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       child: IconButton(
         onPressed: _isLoading ? null : _loadOrderData,
-        // ✅ FIX 2, 3, 4: tambah const pada SizedBox, CircularProgressIndicator, Icon
         icon: _isLoading
             ? const SizedBox(
                 width: 16,
@@ -391,8 +521,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildSalesRow(
-      OrderModel order, int index, bool isVerySmallScreen) {
+  // BUILDER UNTUK BARIS TRANSAKSI HARIAN
+  Widget _buildSalesRow(OrderModel order, int index, bool isVerySmallScreen) {
     final totalPrice = order.items['total_price'] as int? ?? 0;
     final totalItems = order.items['total_items'] as int? ?? 0;
     final items = order.items['items'] as List<dynamic>? ?? [];
@@ -418,8 +548,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       decoration: BoxDecoration(
         color: AppTheme.softWhite,
         borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: AppTheme.warmBeige.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.warmBeige.withValues(alpha: 0.3)),
       ),
       child: InkWell(
         onTap: () => _showOrderDetailsDialog(order),
@@ -446,13 +575,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       color: AppTheme.charcoalGray,
                     ),
                   ),
-                  Text(
-                    '${order.created.day}/${order.created.month}/${order.created.year}',
-                    style: GoogleFonts.poppins(
-                      fontSize: isVerySmallScreen ? 8 : 9,
-                      color: AppTheme.charcoalGray.withValues(alpha: 0.7),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -466,13 +588,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ),
             Expanded(
-              flex: 2,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppTheme.warmBeige.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
@@ -508,6 +628,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   fontWeight: FontWeight.bold,
                   color: AppTheme.deepNavy,
                 ),
+                textAlign: TextAlign.right,
+                maxLines: 1, // PERBAIKAN: Mencegah overflow vertikal
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -516,6 +639,255 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  // BUILDER UNTUK BARIS RANGKUMAN BULANAN
+  Widget _buildMonthlyRow(Map<String, dynamic> monthData, bool isVerySmallScreen) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
+      decoration: BoxDecoration(
+        color: AppTheme.softWhite,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.warmBeige.withValues(alpha: 0.3)),
+      ),
+      child: InkWell(
+        onTap: () => _showMonthlyDetailsDialog(monthData),
+        borderRadius: BorderRadius.circular(10),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.deepNavy.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.calendar_month_rounded, color: AppTheme.deepNavy, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    monthData['monthStr'],
+                    style: GoogleFonts.poppins(
+                      fontSize: isVerySmallScreen ? 12 : 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.deepNavy,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Text(
+                '${monthData['sales']} Pesanan',
+                style: GoogleFonts.poppins(
+                  fontSize: isVerySmallScreen ? 10 : 12,
+                  color: AppTheme.charcoalGray,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            // PERBAIKAN: Mengatur flex menjadi 2 dan menambahkan Flexible & Ellipsis pada Text
+            Expanded(
+              flex: 2,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Rp ${_formatCurrency(monthData['revenue'])}',
+                      style: GoogleFonts.oswald(
+                        fontSize: isVerySmallScreen ? 12 : 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.deepNavy,
+                      ),
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, color: AppTheme.charcoalGray, size: isVerySmallScreen ? 16 : 20),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // DIALOG BARU UNTUK MELIHAT PESANAN DALAM SATU BULAN TERTENTU
+  void _showMonthlyDetailsDialog(Map<String, dynamic> monthData) {
+    // Ambil data spesifik hanya untuk bulan yang diklik
+    final monthlyOrders = _orders.where((o) {
+      String key = "${o.created.year}-${o.created.month.toString().padLeft(2, '0')}";
+      return key == monthData['sortKey'];
+    }).toList();
+
+    // Urutkan dari pesanan terbaru
+    monthlyOrders.sort((a, b) => b.created.compareTo(a.created));
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 650),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Rincian Bulan ${monthData['monthStr']}',
+                      style: GoogleFonts.oswald(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.deepNavy,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Summary Box di dalam Dialog
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total Pesanan',
+                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 10),
+                        ),
+                        Text(
+                          '${monthData['sales']} Pesanan',
+                          style: GoogleFonts.oswald(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Total Pendapatan',
+                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 10),
+                        ),
+                        Text(
+                          'Rp ${_formatCurrency(monthData['revenue'])}',
+                          style: GoogleFonts.oswald(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Daftar Transaksi:',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.deepNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              // List Transaksi dalam Bulan tersebut
+              Flexible(
+                child: monthlyOrders.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Tidak ada data transaksi.',
+                          style: GoogleFonts.poppins(color: AppTheme.charcoalGray),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: monthlyOrders.length,
+                        itemBuilder: (context, index) {
+                          final order = monthlyOrders[index];
+                          final totalPrice = order.items['total_price'] as int? ?? 0;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.softWhite,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: AppTheme.warmBeige.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      order.id.substring(0, 8).toUpperCase(),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.deepNavy,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${order.created.day}/${order.created.month}/${order.created.year} ${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10,
+                                        color: AppTheme.charcoalGray,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  'Rp ${_formatCurrency(totalPrice)}',
+                                  style: GoogleFonts.oswald(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.deepNavy,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // DIALOG RINCIAN PESANAN INDIVIDU (Klik dari Harian)
   void _showOrderDetailsDialog(OrderModel order) {
     final items = order.items['items'] as List<dynamic>? ?? [];
     final totalPrice = order.items['total_price'] as int? ?? 0;
@@ -524,8 +896,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
           padding: const EdgeInsets.all(20),
@@ -588,7 +959,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Items (${items.length}):',
+                'Items ($totalItems):',
                 style: GoogleFonts.oswald(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -619,8 +990,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         color: AppTheme.softWhite,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color:
-                                AppTheme.warmBeige.withValues(alpha: 0.3)),
+                            color: AppTheme.warmBeige.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -743,8 +1113,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         children: [
           Row(
             children: [
-              Icon(icon,
-                  color: Colors.white, size: isVerySmallScreen ? 18 : 20),
+              Icon(icon, color: Colors.white, size: isVerySmallScreen ? 18 : 20),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.all(4),
@@ -797,8 +1166,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  // EXPORT PDF MENYESUAIKAN FILTER
   Future<void> _exportToPdf() async {
     final pdf = pw.Document();
+
+    final isDaily = _filterMode == 'daily';
+    final reportTitle = isDaily 
+        ? 'Laporan Penjualan (Harian) - ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}'
+        : 'Laporan Penjualan (Rangkuman Bulanan)';
 
     pdf.addPage(
       pw.Page(
@@ -807,18 +1182,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'GRBK Coffee - Laporan Penjualan',
+                'GRBK Coffee',
                 style: pw.TextStyle(
-                  fontSize: 18,
+                  fontSize: 24,
                   fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue900,
                 ),
               ),
               pw.SizedBox(height: 5),
               pw.Text(
-                'Semua Transaksi',
-                style: const pw.TextStyle(fontSize: 12),
+                reportTitle,
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
-              pw.SizedBox(height: 15),
+              pw.SizedBox(height: 20),
+              
+              // Kotak Rangkuman
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -831,32 +1212,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
+                        pw.Text('Total Pendapatan', style: const pw.TextStyle(fontSize: 10)),
                         pw.Text(
-                          'Total Pendapatan',
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          'Rp ${_formatCurrency(_totalRevenue)}',
-                          style: pw.TextStyle(
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
+                          'Rp ${_formatCurrency(_currentTotalRevenue)}',
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                         ),
                       ],
                     ),
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
+                        pw.Text('Jumlah Pesanan', style: const pw.TextStyle(fontSize: 10)),
                         pw.Text(
-                          'Jumlah Pesanan',
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          '$_totalSales',
-                          style: pw.TextStyle(
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
+                          '$_currentTotalSales',
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                         ),
                       ],
                     ),
@@ -864,131 +1233,78 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               ),
               pw.SizedBox(height: 15),
+
+              // Header Tabel
               pw.Container(
-                color: PdfColors.grey300,
-                padding: const pw.EdgeInsets.symmetric(
-                    vertical: 5, horizontal: 10),
+                color: PdfColors.blue900,
+                padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                 child: pw.Row(
-                  children: [
-                    pw.Expanded(
-                      flex: 2,
-                      child: pw.Text(
-                        'Order ID',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 10),
-                      ),
-                    ),
-                    pw.Expanded(
-                      flex: 2,
-                      child: pw.Text(
-                        'Payment ID',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 10),
-                      ),
-                    ),
-                    pw.Expanded(
-                      child: pw.Text(
-                        'Date',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 10),
-                      ),
-                    ),
-                    pw.Expanded(
-                      child: pw.Text(
-                        'Time',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 10),
-                      ),
-                    ),
-                    pw.Expanded(
-                      child: pw.Text(
-                        'Items',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 10),
-                      ),
-                    ),
-                    pw.Expanded(
-                      child: pw.Text(
-                        'Total',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 10),
-                        textAlign: pw.TextAlign.right,
-                      ),
-                    ),
-                  ],
+                  children: isDaily 
+                  ? [
+                      pw.Expanded(flex: 2, child: pw.Text('Order ID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Expanded(flex: 2, child: pw.Text('Waktu', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Expanded(child: pw.Text('Items', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Expanded(flex: 2, child: pw.Text('Total', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.right)),
+                    ]
+                  : [
+                      pw.Expanded(flex: 2, child: pw.Text('Bulan', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Expanded(child: pw.Text('Jumlah Pesanan', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Expanded(child: pw.Text('Total Pendapatan', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.right)),
+                    ],
                 ),
               ),
-              pw.ListView.builder(
-                itemCount: _orders.length,
-                itemBuilder: (context, index) {
-                  final order = _orders[index];
-                  final bgColor = index % 2 == 0
-                      ? PdfColors.grey100
-                      : PdfColors.white;
-                  final totalPrice =
-                      order.items['total_price'] as int? ?? 0;
-                  final totalItems =
-                      order.items['total_items'] as int? ?? 0;
 
-                  return pw.Container(
-                    color: bgColor,
-                    padding: const pw.EdgeInsets.symmetric(
-                        vertical: 5, horizontal: 10),
-                    child: pw.Row(
-                      children: [
-                        pw.Expanded(
-                          flex: 2,
-                          child: pw.Text(
-                            order.id,
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                        ),
-                        pw.Expanded(
-                          flex: 2,
-                          child: pw.Text(
-                            order.paymentId,
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                        ),
-                        pw.Expanded(
-                          child: pw.Text(
-                            '${order.created.day}/${order.created.month}/${order.created.year}',
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                        ),
-                        pw.Expanded(
-                          child: pw.Text(
-                            '${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}',
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                        ),
-                        pw.Expanded(
-                          child: pw.Text(
-                            '$totalItems',
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                        ),
-                        pw.Expanded(
-                          child: pw.Text(
-                            'Rp ${_formatCurrency(totalPrice)}',
-                            style: const pw.TextStyle(fontSize: 9),
-                            textAlign: pw.TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              // Isi Tabel
+              if (isDaily)
+                pw.ListView.builder(
+                  itemCount: _filteredDailyOrders.length,
+                  itemBuilder: (context, index) {
+                    final order = _filteredDailyOrders[index];
+                    final bgColor = index % 2 == 0 ? PdfColors.grey100 : PdfColors.white;
+                    final totalPrice = order.items['total_price'] as int? ?? 0;
+                    final totalItems = order.items['total_items'] as int? ?? 0;
+
+                    return pw.Container(
+                      color: bgColor,
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                      child: pw.Row(
+                        children: [
+                          pw.Expanded(flex: 2, child: pw.Text(order.id.substring(0,8), style: const pw.TextStyle(fontSize: 9))),
+                          pw.Expanded(flex: 2, child: pw.Text('${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}', style: const pw.TextStyle(fontSize: 9))),
+                          pw.Expanded(child: pw.Text('$totalItems', style: const pw.TextStyle(fontSize: 9))),
+                          pw.Expanded(flex: 2, child: pw.Text('Rp ${_formatCurrency(totalPrice)}', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.right)),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              else
+                pw.ListView.builder(
+                  itemCount: _monthlySummary.length,
+                  itemBuilder: (context, index) {
+                    final month = _monthlySummary[index];
+                    final bgColor = index % 2 == 0 ? PdfColors.grey100 : PdfColors.white;
+
+                    return pw.Container(
+                      color: bgColor,
+                      padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                      child: pw.Row(
+                        children: [
+                          pw.Expanded(flex: 2, child: pw.Text(month['monthStr'], style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+                          pw.Expanded(child: pw.Text('${month['sales']}', style: const pw.TextStyle(fontSize: 10))),
+                          pw.Expanded(child: pw.Text('Rp ${_formatCurrency(month['revenue'])}', style: const pw.TextStyle(fontSize: 10), textAlign: pw.TextAlign.right)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
               pw.SizedBox(height: 20),
               pw.Container(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Text(
-                  'Generated on ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year} ${DateTime.now().hour}:${DateTime.now().minute}',
-                  style: const pw.TextStyle(
-                    fontSize: 8,
-                    color: PdfColors.grey700,
-                  ),
+                  'Dibuat otomatis pada ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year} ${DateTime.now().hour}:${DateTime.now().minute}',
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
                 ),
               ),
             ],
@@ -998,110 +1314,89 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
 
     final bytes = await pdf.save();
+    final filename = isDaily 
+        ? 'GRBK_Harian_${_selectedDate.day}-${_selectedDate.month}-${_selectedDate.year}.pdf'
+        : 'GRBK_Bulanan_${DateTime.now().millisecondsSinceEpoch}.pdf';
 
     if (kIsWeb) {
-      _downloadFileWeb(bytes,
-          'GRBK_Coffee_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
-          'application/pdf');
+      _downloadFileWeb(bytes, filename, 'application/pdf');
     } else {
       final directory = await getApplicationDocumentsDirectory();
-      final file = File(
-          '${directory.path}/GRBK_Coffee_Report_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      final file = File('${directory.path}/$filename');
       await file.writeAsBytes(bytes);
     }
   }
 
+  // EXPORT EXCEL MENYESUAIKAN FILTER
   Future<void> _exportToExcel() async {
     final excel = Excel.createExcel();
-    final sheet = excel['Sales Report'];
+    final sheet = excel['Laporan Penjualan'];
+    final isDaily = _filterMode == 'daily';
 
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
-        .value = TextCellValue('GRBK Coffee - Laporan Penjualan');
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1))
-        .value = TextCellValue('Semua Transaksi');
+    final reportTitle = isDaily 
+        ? 'Laporan Penjualan (Harian) - ${_selectedDate.day} ${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}'
+        : 'Laporan Penjualan (Rangkuman Bulanan)';
 
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 3))
-        .value = TextCellValue('Total Pendapatan');
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: 3))
-        .value = TextCellValue('Rp ${_formatCurrency(_totalRevenue)}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue('GRBK Coffee');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue(reportTitle);
 
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: 3))
-        .value = TextCellValue('Jumlah Pesanan');
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: 3))
-        .value = IntCellValue(_totalSales);
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 3)).value = TextCellValue('Total Pendapatan');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: 3)).value = TextCellValue('Rp ${_formatCurrency(_currentTotalRevenue)}');
 
-    final headers = [
-      'Order ID',
-      'Payment ID',
-      'Date',
-      'Time',
-      'Items',
-      'Total'
-    ];
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: 3)).value = TextCellValue('Jumlah Pesanan');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: 3)).value = IntCellValue(_currentTotalSales);
+
+    // Tulis Header berdasarkan Mode
+    final headers = isDaily 
+        ? ['Order ID', 'Payment ID', 'Waktu', 'Jumlah Item', 'Total (Rp)']
+        : ['Bulan', 'Jumlah Pesanan', 'Total Pendapatan (Rp)'];
+
     for (var i = 0; i < headers.length; i++) {
-      sheet
-          .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 5))
-          .value = TextCellValue(headers[i]);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 5)).value = TextCellValue(headers[i]);
     }
 
-    for (var i = 0; i < _orders.length; i++) {
-      final order = _orders[i];
-      final totalPrice = order.items['total_price'] as int? ?? 0;
-      final totalItems = order.items['total_items'] as int? ?? 0;
+    // Tulis Isi Data berdasarkan Mode
+    if (isDaily) {
+      for (var i = 0; i < _filteredDailyOrders.length; i++) {
+        final order = _filteredDailyOrders[i];
+        final totalPrice = order.items['total_price'] as int? ?? 0;
+        final totalItems = order.items['total_items'] as int? ?? 0;
 
-      sheet
-          .cell(
-              CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: i + 6))
-          .value = TextCellValue(order.id);
-      sheet
-          .cell(
-              CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: i + 6))
-          .value = TextCellValue(order.paymentId);
-      sheet
-          .cell(
-              CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: i + 6))
-          .value = TextCellValue(
-          '${order.created.day}/${order.created.month}/${order.created.year}');
-      sheet
-          .cell(
-              CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: i + 6))
-          .value = TextCellValue(
-          '${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}');
-      sheet
-          .cell(
-              CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: i + 6))
-          .value = IntCellValue(totalItems);
-      sheet
-          .cell(
-              CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: i + 6))
-          .value = TextCellValue('Rp ${_formatCurrency(totalPrice)}');
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: i + 6)).value = TextCellValue(order.id);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: i + 6)).value = TextCellValue(order.paymentId);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: i + 6)).value = TextCellValue('${order.created.hour}:${order.created.minute.toString().padLeft(2, '0')}');
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: i + 6)).value = IntCellValue(totalItems);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: i + 6)).value = IntCellValue(totalPrice);
+      }
+    } else {
+      for (var i = 0; i < _monthlySummary.length; i++) {
+        final month = _monthlySummary[i];
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: i + 6)).value = TextCellValue(month['monthStr']);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: i + 6)).value = IntCellValue(month['sales']);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: i + 6)).value = IntCellValue(month['revenue']);
+      }
     }
 
     final bytes = excel.encode();
+    final filename = isDaily 
+        ? 'GRBK_Harian_${_selectedDate.day}-${_selectedDate.month}-${_selectedDate.year}.xlsx'
+        : 'GRBK_Bulanan_${DateTime.now().millisecondsSinceEpoch}.xlsx';
 
     if (bytes != null) {
       if (kIsWeb) {
         _downloadFileWeb(
             Uint8List.fromList(bytes),
-            'GRBK_Coffee_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+            filename,
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       } else {
         final directory = await getApplicationDocumentsDirectory();
-        final file = File(
-            '${directory.path}/GRBK_Coffee_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+        final file = File('${directory.path}/$filename');
         await file.writeAsBytes(bytes);
       }
     }
   }
 
-  void _downloadFileWeb(
-      Uint8List bytes, String filename, String mimeType) {
+  void _downloadFileWeb(Uint8List bytes, String filename, String mimeType) {
     if (kIsWeb) {
       try {
         final blob = html.Blob([bytes], mimeType);
@@ -1127,8 +1422,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
       ),
     );
@@ -1143,8 +1437,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
       ),
     );
